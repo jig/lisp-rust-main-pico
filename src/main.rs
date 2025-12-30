@@ -46,6 +46,7 @@ pub static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
 
 // UART related types
 use hal::uart::{DataBits, StopBits, UartConfig};
+use heapless::String;
 
 /// Tell the Boot ROM about our application
 #[unsafe(link_section = ".start_block")]
@@ -116,7 +117,7 @@ fn main() -> ! {
 
     const BUF_LINE_LENGHT: usize = 256;
     loop {
-        let command = String::new();
+        let mut command: String<BUF_LINE_LENGHT> = String::new();
         loop {
             let mut buf = [0u8; BUF_LINE_LENGHT];
             match uart0.read_raw(&mut buf) {
@@ -132,12 +133,22 @@ fn main() -> ! {
                     led_pin.set_high().unwrap();
                     // cortex_m::asm::bkpt();
                     let value = core::str::from_utf8(&buf[0..count]).unwrap_or("<invalid utf8>");
+                    let _ = command.push_str(value);
                     uart0.write_full_blocking(value.as_bytes());
                     led_pin.set_low().unwrap();
+
+                    if value.contains('\r') || value.contains('\n') {
+                        break;
+                    }
                 }
             }
         }
+        exec(&command);
     }
+}
+
+fn exec(command: &str) {
+    info!("Received command: {}", command);
 }
 
 /// Program metadata for `picotool info`
