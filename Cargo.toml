@@ -15,6 +15,7 @@ embedded-hal = "1.0.0"
 defmt = "1"
 defmt-rtt = "1"
 heapless = "0.8"
+nb = "1"
 
 [target.'cfg( target_arch = "arm" )'.dependencies]
 panic-probe = { version = "1", features = ["print-defmt"] }
@@ -24,10 +25,10 @@ panic-halt = { version = "1.0.0" }
 
 [target.thumbv6m-none-eabi.dependencies]
 rp2040-boot2 = "0.3"
-rp2040-hal = { version = "0.11", features = ["rt", "critical-section-impl"] }
+rp2040-hal = { version = "0.11", features = ["rt", "critical-section-impl", "defmt"] }
 
 [target.riscv32imac-unknown-none-elf.dependencies]
-rp235x-hal = { version = "0.3", features = ["rt", "critical-section-impl"] }
+rp235x-hal = { version = "0.3", features = ["rt", "critical-section-impl", "defmt"] }
 
 [target."thumbv8m.main-none-eabihf".dependencies]
-rp235x-hal = { version = "0.3", features = ["rt", "critical-section-impl"] }
+rp235x-hal = { version = "0.3", features = ["rt", "critical-section-impl", "defmt"] }

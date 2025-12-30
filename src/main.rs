@@ -116,39 +116,53 @@ fn main() -> ! {
     uart0.write_full_blocking(b"\r\nBorinot Firmware\r\n");
 
     const BUF_LINE_LENGHT: usize = 256;
+    let mut command: String<BUF_LINE_LENGHT> = String::new();
     loop {
-        let mut command: String<BUF_LINE_LENGHT> = String::new();
-        loop {
-            let mut buf = [0u8; BUF_LINE_LENGHT];
-            match uart0.read_raw(&mut buf) {
-                Err(_err) => {
-                    delay.delay_ms(1u32);
-                    continue;
-                }
-                Ok(0) => {
-                    delay.delay_ms(1u32);
-                    continue;
-                }
-                Ok(count) => {
-                    led_pin.set_high().unwrap();
-                    // cortex_m::asm::bkpt();
-                    let value = core::str::from_utf8(&buf[0..count]).unwrap_or("<invalid utf8>");
-                    let _ = command.push_str(value);
-                    uart0.write_full_blocking(value.as_bytes());
-                    led_pin.set_low().unwrap();
+        let mut buf = [0u8; BUF_LINE_LENGHT];
+        match uart0.read_raw(&mut buf) {
+            Err(nb::Error::WouldBlock) => {
+                delay.delay_us(1u32);
+                // cortex_m::asm::nop();
+                continue;
+            }
+            Err(nb::Error::Other(err)) => {
+                error!("uart0.read_raw: {:?}", err);
+                delay.delay_us(1u32);
+                continue;
+            }
+            Ok(0) => {
+                info!("uart0.read_raw: Ok(0)");
+                delay.delay_us(1u32);
+                continue;
+            }
+            Ok(count) => {
+                led_pin.set_high().unwrap();
+                // cortex_m::asm::bkpt();
+                let value = core::str::from_utf8(&buf[0..count]).unwrap_or("<invalid utf8>");
+                uart0.write_full_blocking(value.as_bytes());
 
-                    if value.contains('\r') || value.contains('\n') {
-                        break;
+                for c in value.chars() {
+                    if c == '\r' {
+                        info!("uart0.read_raw: Ok(\\r)");
+                        exec(&command);
+                        command.clear();
+                    } else if c == '\n' {
+                        info!("uart0.read_raw: Ok(\\n)");
+                        exec(&command);
+                        command.clear();
+                    } else {
+                        info!("uart0.read_raw: Ok({})", &value);
+                        let _ = command.push(c);
                     }
                 }
+                led_pin.set_low().unwrap();
             }
         }
-        exec(&command);
     }
 }
 
 fn exec(command: &str) {
-    info!("Received command: {}", command);
+    warn!("EXEC: {}", command);
 }
 
 /// Program metadata for `picotool info`
