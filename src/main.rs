@@ -1,14 +1,12 @@
-//! SPDX-License-Identifier: MIT OR Apache-2.0
+//! # UART Example
 //!
-//! Copyright (c) 2021–2024 The rp-rs Developers
-//! Copyright (c) 2021 rp-rs organization
-//! Copyright (c) 2025 Raspberry Pi Ltd.
+//! This application demonstrates how to use the UART Driver to talk to a serial
+//! connection.
 //!
-//! # GPIO 'Blinky' Example
+//! It may need to be adapted to your particular board layout and/or pin
+//! assignment.
 //!
-//! This application demonstrates how to control a GPIO pin on the rp2040 and rp235x.
-//!
-//! It may need to be adapted to your particular board layout and/or pin assignment.
+//! See the `Cargo.toml` file for Copyright and license details.
 
 #![no_std]
 #![no_main]
@@ -17,13 +15,15 @@ use defmt::*;
 use defmt_rtt as _;
 use embedded_hal::delay::DelayNs;
 use embedded_hal::digital::OutputPin;
+use hal::clocks::Clock;
+use hal::fugit::RateExtU32;
+
 #[cfg(target_arch = "riscv32")]
 use panic_halt as _;
 #[cfg(target_arch = "arm")]
 use panic_probe as _;
 
-// Alias for our HAL crate
-use hal::entry;
+// Some things we need
 
 #[cfg(rp2350)]
 use rp235x_hal as hal;
@@ -44,6 +44,9 @@ use rp2040_hal as hal;
 #[cfg(rp2040)]
 pub static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
 
+// UART related types
+use hal::uart::{DataBits, StopBits, UartConfig};
+
 /// Tell the Boot ROM about our application
 #[unsafe(link_section = ".start_block")]
 #[used]
@@ -54,16 +57,10 @@ pub static IMAGE_DEF: hal::block::ImageDef = hal::block::ImageDef::secure_exe();
 /// Adjust if your board has a different frequency
 const XTAL_FREQ_HZ: u32 = 12_000_000u32;
 
-/// Entry point to our bare-metal application.
-///
 /// The `#[hal::entry]` macro ensures the Cortex-M start-up code calls this function
 /// as soon as all global variables and the spinlock are initialised.
-///
-/// The function configures the rp2040 and rp235x peripherals, then toggles a GPIO pin in
-/// an infinite loop. If there is an LED connected to that pin, it will blink.
-#[entry]
+#[hal::entry]
 fn main() -> ! {
-    info!("Program start");
     // Grab our singleton objects
     let mut pac = hal::pac::Peripherals::take().unwrap();
 
@@ -83,10 +80,10 @@ fn main() -> ! {
     .unwrap();
 
     #[cfg(rp2040)]
-    let mut timer = hal::Timer::new(pac.TIMER, &mut pac.RESETS, &clocks);
+    let mut delay = hal::Timer::new(pac.TIMER, &mut pac.RESETS, &clocks);
 
     #[cfg(rp2350)]
-    let mut timer = hal::Timer::new_timer0(pac.TIMER0, &mut pac.RESETS, &clocks);
+    let mut delay = hal::Timer::new_timer0(pac.TIMER0, &mut pac.RESETS, &clocks);
 
     // The single-cycle I/O block controls our GPIO pins
     let sio = hal::Sio::new(pac.SIO);
@@ -101,16 +98,45 @@ fn main() -> ! {
 
     // Configure GPIO25 as an output
     let mut led_pin = pins.gpio25.into_push_pull_output();
+
+    let uart0_pins = (
+        // UART TX (characters sent from rp235x) on pin 4 (GPIO2) in Aux mode
+        pins.gpio0.into_function(),
+        // UART RX (characters received by rp235x) on pin 5 (GPIO3) in Aux mode
+        pins.gpio1.into_function(),
+    );
+    let uart0 = hal::uart::UartPeripheral::new(pac.UART0, uart0_pins, &mut pac.RESETS)
+        .enable(
+            UartConfig::new(115200.Hz(), DataBits::Eight, None, StopBits::One),
+            clocks.peripheral_clock.freq(),
+        )
+        .unwrap();
+
+    uart0.write_full_blocking(b"\r\nBorinot Firmware\r\n");
+
+    const BUF_LINE_LENGHT: usize = 256;
     loop {
-        info!("on!");
-        led_pin.set_high().unwrap();
-        timer.delay_ms(200);
-        info!("off!");
-
-        // cortex_m::asm::bkpt();
-
-        led_pin.set_low().unwrap();
-        timer.delay_ms(200);
+        let command = String::new();
+        loop {
+            let mut buf = [0u8; BUF_LINE_LENGHT];
+            match uart0.read_raw(&mut buf) {
+                Err(_err) => {
+                    delay.delay_ms(1u32);
+                    continue;
+                }
+                Ok(0) => {
+                    delay.delay_ms(1u32);
+                    continue;
+                }
+                Ok(count) => {
+                    led_pin.set_high().unwrap();
+                    // cortex_m::asm::bkpt();
+                    let value = core::str::from_utf8(&buf[0..count]).unwrap_or("<invalid utf8>");
+                    uart0.write_full_blocking(value.as_bytes());
+                    led_pin.set_low().unwrap();
+                }
+            }
+        }
     }
 }
 
@@ -120,7 +146,7 @@ fn main() -> ! {
 pub static PICOTOOL_ENTRIES: [hal::binary_info::EntryAddr; 5] = [
     hal::binary_info::rp_cargo_bin_name!(),
     hal::binary_info::rp_cargo_version!(),
-    hal::binary_info::rp_program_description!(c"Blinky Example"),
+    hal::binary_info::rp_program_description!(c"Borinot Firmware"),
     hal::binary_info::rp_cargo_homepage_url!(),
     hal::binary_info::rp_program_build_attribute!(),
 ];
