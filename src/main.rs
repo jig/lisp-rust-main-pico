@@ -2,17 +2,21 @@
 #![no_main]
 
 mod pico_core;
+mod pid;
 
 extern crate alloc;
 use alloc::{boxed::Box, vec};
 use core::cell::RefCell;
+use cortex_m::interrupt::{Mutex, free};
+use cortex_m::peripheral::NVIC;
 
 use defmt::*;
 use defmt_rtt as _;
 use embedded_hal::delay::DelayNs;
-// use embedded_hal::digital::OutputPin;
+use embedded_hal::digital::StatefulOutputPin;
 use hal::clocks::Clock;
-use hal::fugit::RateExtU32;
+use hal::fugit::{MicrosDurationU32, RateExtU32};
+use hal::timer::Alarm;
 
 use mal::types::MalVal::Int;
 use mal::types::{MalArgs, MalRet, error, func, func_closure};
@@ -21,6 +25,11 @@ use mal::types::{MalArgs, MalRet, error, func, func_closure};
 use panic_halt as _;
 #[cfg(target_arch = "arm")]
 use panic_probe as _;
+
+#[cfg(rp2350)]
+use hal::pac::interrupt;
+#[cfg(rp2040)]
+use hal::pac::interrupt;
 
 use embedded_alloc::LlffHeap as Heap;
 
@@ -74,6 +83,21 @@ type UartType = hal::uart::UartPeripheral<
 >;
 
 static mut GLOBAL_UART0: Option<&'static mut UartType> = None;
+
+// GPIO pin for timer interrupt test (GPIO25 - onboard LED)
+type TestPinType =
+    hal::gpio::Pin<hal::gpio::bank0::Gpio25, hal::gpio::FunctionSioOutput, hal::gpio::PullDown>;
+static GLOBAL_TEST_PIN: Mutex<RefCell<Option<TestPinType>>> = Mutex::new(RefCell::new(None));
+
+// Alarm for periodic interrupts
+#[cfg(rp2350)]
+type AlarmType = hal::timer::Alarm0<hal::timer::CopyableTimer0>;
+#[cfg(rp2040)]
+type AlarmType = hal::timer::Alarm0<hal::timer::Timer<hal::timer::TimerDevice>>;
+static GLOBAL_ALARM: Mutex<RefCell<Option<AlarmType>>> = Mutex::new(RefCell::new(None));
+
+// Counter for ISR debugging
+static ISR_COUNTER: Mutex<RefCell<u32>> = Mutex::new(RefCell::new(0));
 
 fn eval_wrapper(a: MalArgs) -> MalRet {
     if a.len() != 1 {
@@ -163,8 +187,11 @@ fn main() -> ! {
         &mut pac.RESETS,
     );
 
-    // Configure GPIO25 as an output
-    let led_pin = pins.gpio25.into_push_pull_output();
+    // Configure GPIO25 as output for timer interrupt test (onboard LED)
+    let test_pin = pins.gpio25.into_push_pull_output();
+    free(|cs| {
+        GLOBAL_TEST_PIN.borrow(cs).replace(Some(test_pin));
+    });
 
     let uart0_pins = (
         // UART TX (characters sent from rp235x) on pin 4 (GPIO2) in Aux mode
@@ -187,6 +214,27 @@ fn main() -> ! {
         GLOBAL_UART0 = Some(uart0_static);
     }
     info!("Borinot Firmware started!");
+
+    // Configure alarm for 200ms periodic interrupt
+    let mut alarm = delay.alarm_0().unwrap();
+    let _ = alarm.schedule(MicrosDurationU32::from_ticks(200_000));
+    alarm.enable_interrupt();
+    free(|cs| {
+        GLOBAL_ALARM.borrow(cs).replace(Some(alarm));
+    });
+
+    // Enable timer interrupt in NVIC
+    #[cfg(rp2350)]
+    unsafe {
+        NVIC::unmask(hal::pac::Interrupt::TIMER0_IRQ_0);
+    }
+    #[cfg(rp2040)]
+    unsafe {
+        NVIC::unmask(hal::pac::Interrupt::TIMER_IRQ_0);
+    }
+
+    info!("Timer alarm configured for 200ms");
+
     // Initialize heap
     {
         use core::mem::MaybeUninit;
@@ -217,14 +265,6 @@ fn main() -> ! {
         func_closure(create_time_ms_func(delay_static)),
     );
 
-    // Leak led_pin to get 'static lifetime for the closure
-    let led_pin_static = Box::leak(Box::new(RefCell::new(led_pin)));
-    env_sets(
-        &env,
-        "led",
-        func_closure(pico_core::create_led_func(led_pin_static)),
-    );
-
     env_sets(
         &env,
         "time-s",
@@ -240,6 +280,14 @@ fn main() -> ! {
     env_sets(&env, "readline", func(readline));
     env_sets(&env, "prn", func(pico_core::prn));
     env_sets(&env, "println", func(pico_core::println));
+    env_sets(&env, "mem-free", func(pico_core::mem_free));
+
+    // PID functions
+    env_sets(&env, "pid-set-gains", func(pico_core::pid_set_gains));
+    env_sets(&env, "pid-set-setpoint", func(pico_core::pid_set_setpoint));
+    env_sets(&env, "pid-enable", func(pico_core::pid_enable));
+    env_sets(&env, "pid-reset", func(pico_core::pid_reset));
+    env_sets(&env, "pid-set-limits", func(pico_core::pid_set_limits));
 
     // Leak env to get a 'static reference, then set eval
     let env_static: &'static mal::Env = Box::leak(Box::new(env.clone()));
@@ -307,6 +355,61 @@ fn main() -> ! {
             }
         }
     }
+}
+
+/// Timer interrupt handler - runs every 200ms
+/// Toggles GPIO25 (onboard LED) to validate the timer is working
+#[cfg(rp2350)]
+#[interrupt]
+fn TIMER0_IRQ_0() {
+    free(|cs| {
+        // Increment counter
+        let mut counter = ISR_COUNTER.borrow(cs).borrow_mut();
+        *counter = counter.wrapping_add(1);
+
+        // Log every 10 interrupts (2 seconds)
+        if *counter % 10 == 0 {
+            defmt::info!("ISR executed {} times", *counter);
+        }
+        // Clear the interrupt
+        if let Some(ref mut alarm) = *GLOBAL_ALARM.borrow(cs).borrow_mut() {
+            alarm.clear_interrupt();
+            // Schedule next interrupt (200ms from now)
+            let _ = alarm.schedule(MicrosDurationU32::from_ticks(200_000));
+        }
+
+        // Toggle test pin
+        if let Some(ref mut pin) = *GLOBAL_TEST_PIN.borrow(cs).borrow_mut() {
+            let _ = pin.toggle();
+        }
+    });
+}
+
+#[cfg(rp2040)]
+#[interrupt]
+fn TIMER_IRQ_0() {
+    free(|cs| {
+        // Increment counter
+        let mut counter = ISR_COUNTER.borrow(cs).borrow_mut();
+        *counter = counter.wrapping_add(1);
+
+        // Log every 10 interrupts (2 seconds)
+        if *counter % 10 == 0 {
+            defmt::info!("ISR executed {} times", *counter);
+        }
+
+        // Clear the interrupt
+        if let Some(ref mut alarm) = *GLOBAL_ALARM.borrow(cs).borrow_mut() {
+            alarm.clear_interrupt();
+            // Schedule next interrupt (200ms from now)
+            let _ = alarm.schedule(MicrosDurationU32::from_ticks(200_000));
+        }
+
+        // Toggle test pin
+        if let Some(ref mut pin) = *GLOBAL_TEST_PIN.borrow(cs).borrow_mut() {
+            let _ = pin.toggle();
+        }
+    });
 }
 
 /// Program metadata for `picotool info`
