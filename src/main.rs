@@ -2,7 +2,7 @@
 #![no_main]
 
 extern crate alloc;
-use alloc::vec;
+use alloc::{boxed::Box, vec};
 
 use defmt::*;
 use defmt_rtt as _;
@@ -10,6 +10,9 @@ use embedded_hal::delay::DelayNs;
 use embedded_hal::digital::OutputPin;
 use hal::clocks::Clock;
 use hal::fugit::RateExtU32;
+
+use mal::types::MalVal::Int;
+use mal::types::{MalArgs, MalRet, error, func};
 
 #[cfg(target_arch = "riscv32")]
 use panic_halt as _;
@@ -55,6 +58,39 @@ pub static IMAGE_DEF: hal::block::ImageDef = hal::block::ImageDef::secure_exe();
 /// External high-speed crystal on the Raspberry Pi Pico 2 board is 12 MHz.
 /// Adjust if your board has a different frequency
 const XTAL_FREQ_HZ: u32 = 12_000_000u32;
+
+static mut GLOBAL_ENV: Option<&'static mal::Env> = None;
+
+// fn get_timer_ticks(timer: &hal::Timer<impl hal::timer::TimerDevice>) -> u64 {
+//     timer.get_counter().ticks()
+// }
+
+fn eval_wrapper(a: MalArgs) -> MalRet {
+    if a.len() != 1 {
+        return error("eval requires exactly 1 argument");
+    }
+    // SAFETY: Safe because GLOBAL_ENV is initialized before eval_wrapper is called
+    let env = unsafe { GLOBAL_ENV.unwrap() };
+    mal::eval(&a[0], env)
+}
+
+fn slurp(a: MalArgs) -> MalRet {
+    if a.len() != 1 {
+        return error("read-file expects 1 argument");
+    }
+    error("unimplemented: slurp")
+}
+
+fn create_time_us_func<'a>(
+    timer: &'a hal::Timer<impl hal::timer::TimerDevice>,
+) -> impl Fn(MalArgs) -> MalRet + 'a {
+    move |args: MalArgs| {
+        if args.len() != 0 {
+            return error("time-us expects 0 arguments");
+        }
+        Ok(Int(timer.get_counter().ticks() as i64))
+    }
+}
 
 /// The `#[hal::entry]` macro ensures the Cortex-M start-up code calls this function
 /// as soon as all global variables and the spinlock are initialised.
@@ -112,7 +148,7 @@ fn main() -> ! {
         .unwrap();
 
     uart0.write_full_blocking(b"\r\nBorinot Firmware\r\n");
-
+    info!("Borinot Firmware started!");
     // Initialize heap
     {
         use core::mem::MaybeUninit;
@@ -122,11 +158,29 @@ fn main() -> ! {
         unsafe { HEAP.init(addr_of_mut!(HEAP_MEM) as usize, HEAP_SIZE) }
     }
 
-    use mal::{initialize_mal_env, mal_env, rep};
+    use mal::{env_sets, initialize_mal_env, mal_env, rep};
 
     // Create environment - readline is no longer part of core
     let env = mal_env();
     initialize_mal_env(&env, vec![]);
+
+    env_sets(&env, "slurp", func(slurp));
+    env_sets(&env, "time-us", func(create_time_us_func(&delay)));
+
+    fn readline(a: MalArgs) -> MalRet {
+        if a.len() != 1 {
+            return error("readline expects 1 argument");
+        }
+        error("readline not supported on embedded")
+    }
+    env_sets(&env, "readline", func(readline));
+
+    // Leak env to get a 'static reference, then set eval
+    let env_static: &'static mal::Env = Box::leak(Box::new(env.clone()));
+    unsafe {
+        GLOBAL_ENV = Some(env_static);
+    }
+    env_sets(&env, "eval", func(eval_wrapper));
 
     const BUF_LINE_LENGHT: usize = 256;
     let mut command: String<BUF_LINE_LENGHT> = String::new();
@@ -180,7 +234,7 @@ fn main() -> ! {
                         led_pin.set_low().unwrap();
                         command.clear();
                     } else {
-                        debug!("uart0.read_raw: Ok({})", &value);
+                        debug!("uart0.read_raw: Ok({})", &c);
                         let _ = command.push(c);
                     }
                 }
