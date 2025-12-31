@@ -10,11 +10,12 @@ use core::cell::RefCell;
 use defmt::*;
 use defmt_rtt as _;
 use embedded_hal::delay::DelayNs;
-use embedded_hal::digital::OutputPin;
+// use embedded_hal::digital::OutputPin;
 use hal::clocks::Clock;
 use hal::fugit::RateExtU32;
+use mal::printer::pr_seq;
 
-use mal::types::MalVal::Int;
+use mal::types::MalVal::{Int, Nil};
 use mal::types::{MalArgs, MalRet, error, func, func_closure};
 
 #[cfg(target_arch = "riscv32")]
@@ -174,7 +175,7 @@ fn main() -> ! {
     {
         use core::mem::MaybeUninit;
         use core::ptr::addr_of_mut;
-        const HEAP_SIZE: usize = 1024 * 64;
+        const HEAP_SIZE: usize = 1024 * 64; // 64 KB
         static mut HEAP_MEM: [MaybeUninit<u8>; HEAP_SIZE] = [MaybeUninit::uninit(); HEAP_SIZE];
         unsafe { HEAP.init(addr_of_mut!(HEAP_MEM) as usize, HEAP_SIZE) }
     }
@@ -202,7 +203,11 @@ fn main() -> ! {
 
     // Leak led_pin to get 'static lifetime for the closure
     let led_pin_static = Box::leak(Box::new(RefCell::new(led_pin)));
-    env_sets(&env, "led", func_closure(pico_core::create_led_func(led_pin_static)));
+    env_sets(
+        &env,
+        "led",
+        func_closure(pico_core::create_led_func(led_pin_static)),
+    );
 
     env_sets(
         &env,
@@ -217,6 +222,33 @@ fn main() -> ! {
         error("readline not supported on embedded")
     }
     env_sets(&env, "readline", func(readline));
+    // env_sets(
+    //     &env,
+    //     "prn",
+    //     func_closure({
+    //         let uart0_ref = uart0_static;
+    //         move |a| {
+    //             let s = pr_seq(&a, true, "", "", " ");
+    //             info!("{}", &s.as_str());
+    //             uart0_ref.borrow_mut().write_full_blocking(s.as_bytes());
+    //             Ok(Nil)
+    //         }
+    //     }),
+    // );
+    // env_sets(
+    //     &env,
+    //     "println",
+    //     func_closure({
+    //         let uart0_ref = uart0_static;
+    //         move |a| {
+    //             let s = pr_seq(&a, false, "", "", " ");
+    //             info!("{}", &s.as_str());
+    //             uart0_ref.borrow_mut().write_full_blocking(s.as_bytes());
+    //             uart0_ref.borrow_mut().write_full_blocking(b"\r\n");
+    //             Ok(Nil)
+    //         }
+    //     }),
+    // );
 
     // Leak env to get a 'static reference, then set eval
     let env_static: &'static mal::Env = Box::leak(Box::new(env.clone()));

@@ -35,3 +35,19 @@ rp235x-hal = { version = "0.3", features = ["rt", "critical-section-impl", "defm
 
 [target."thumbv8m.main-none-eabihf".dependencies]
 rp235x-hal = { version = "0.3", features = ["rt", "critical-section-impl", "defmt"] }
+
+[profile.dev]
+codegen-units = 1
+debug = 2
+debug-assertions = true
+incremental = false
+opt-level = "s"
+overflow-checks = true
+
+[profile.release]
+codegen-units = 1
+debug = 2
+debug-assertions = false
+lto = "fat"
+opt-level = "z"
+overflow-checks = false
