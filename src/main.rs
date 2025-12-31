@@ -11,6 +11,9 @@
 #![no_std]
 #![no_main]
 
+extern crate alloc;
+use alloc::vec;
+
 use defmt::*;
 use defmt_rtt as _;
 use embedded_hal::delay::DelayNs;
@@ -22,6 +25,11 @@ use hal::fugit::RateExtU32;
 use panic_halt as _;
 #[cfg(target_arch = "arm")]
 use panic_probe as _;
+
+use embedded_alloc::LlffHeap as Heap;
+
+#[global_allocator]
+static HEAP: Heap = Heap::empty();
 
 // Some things we need
 
@@ -115,6 +123,21 @@ fn main() -> ! {
 
     uart0.write_full_blocking(b"\r\nBorinot Firmware\r\n");
 
+    // Initialize heap
+    {
+        use core::mem::MaybeUninit;
+        use core::ptr::addr_of_mut;
+        const HEAP_SIZE: usize = 1024 * 64;
+        static mut HEAP_MEM: [MaybeUninit<u8>; HEAP_SIZE] = [MaybeUninit::uninit(); HEAP_SIZE];
+        unsafe { HEAP.init(addr_of_mut!(HEAP_MEM) as usize, HEAP_SIZE) }
+    }
+
+    use mal::{initialize_mal_env, mal_env, rep};
+
+    // Create environment - readline is no longer part of core
+    let env = mal_env();
+    initialize_mal_env(&env, vec![]);
+
     const BUF_LINE_LENGHT: usize = 256;
     let mut command: String<BUF_LINE_LENGHT> = String::new();
     loop {
@@ -144,11 +167,17 @@ fn main() -> ! {
                 for c in value.chars() {
                     if c == '\r' {
                         info!("uart0.read_raw: Ok(\\r)");
-                        exec(&command);
+                        match rep(command.as_str(), &env) {
+                            Ok(out) => info!("{}", out.as_str()),
+                            Err(e) => error!("Error: {}", e.pr_str(true).as_str()),
+                        }
                         command.clear();
                     } else if c == '\n' {
                         info!("uart0.read_raw: Ok(\\n)");
-                        exec(&command);
+                        match rep(command.as_str(), &env) {
+                            Ok(out) => info!("{}", out.as_str()),
+                            Err(e) => error!("Error: {}", e.pr_str(true).as_str()),
+                        }
                         command.clear();
                     } else {
                         info!("uart0.read_raw: Ok({})", &value);
@@ -159,10 +188,6 @@ fn main() -> ! {
             }
         }
     }
-}
-
-fn exec(command: &str) {
-    warn!("EXEC: {}", command);
 }
 
 /// Program metadata for `picotool info`
