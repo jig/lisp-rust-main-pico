@@ -1,13 +1,3 @@
-//! # UART Example
-//!
-//! This application demonstrates how to use the UART Driver to talk to a serial
-//! connection.
-//!
-//! It may need to be adapted to your particular board layout and/or pin
-//! assignment.
-//!
-//! See the `Cargo.toml` file for Copyright and license details.
-
 #![no_std]
 #![no_main]
 
@@ -175,7 +165,6 @@ fn main() -> ! {
                                 uart0.write_full_blocking(b"\r\n");
                                 info!("=> {}", out.as_str())
                             }
-                            // Err(e.pr_str(true).as_str()) =>
                             Err(err) => {
                                 let e = err.pr_str(true);
                                 if e.as_str() != "\"no input\"" {
