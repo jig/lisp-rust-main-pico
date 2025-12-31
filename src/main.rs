@@ -1,8 +1,11 @@
 #![no_std]
 #![no_main]
 
+mod pico_core;
+
 extern crate alloc;
 use alloc::{boxed::Box, vec};
+use core::cell::RefCell;
 
 use defmt::*;
 use defmt_rtt as _;
@@ -150,7 +153,7 @@ fn main() -> ! {
     );
 
     // Configure GPIO25 as an output
-    let mut led_pin = pins.gpio25.into_push_pull_output();
+    let led_pin = pins.gpio25.into_push_pull_output();
 
     let uart0_pins = (
         // UART TX (characters sent from rp235x) on pin 4 (GPIO2) in Aux mode
@@ -196,6 +199,11 @@ fn main() -> ! {
         "time-ms",
         func_closure(create_time_ms_func(delay_static)),
     );
+
+    // Leak led_pin to get 'static lifetime for the closure
+    let led_pin_static = Box::leak(Box::new(RefCell::new(led_pin)));
+    env_sets(&env, "led", func_closure(pico_core::create_led_func(led_pin_static)));
+
     env_sets(
         &env,
         "time-s",
@@ -245,7 +253,6 @@ fn main() -> ! {
                 for c in value.chars() {
                     if c == '\r' {
                         uart0.write_full_blocking(b"\r\n");
-                        led_pin.set_high().unwrap();
                         match rep(command.as_str(), &env) {
                             Ok(out) => {
                                 info!("> {}", &command.as_str());
@@ -266,7 +273,6 @@ fn main() -> ! {
                                 }
                             }
                         }
-                        led_pin.set_low().unwrap();
                         command.clear();
                     } else {
                         debug!("uart0.read_raw: Ok({})", &c);
