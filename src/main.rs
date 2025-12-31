@@ -13,9 +13,8 @@ use embedded_hal::delay::DelayNs;
 // use embedded_hal::digital::OutputPin;
 use hal::clocks::Clock;
 use hal::fugit::RateExtU32;
-use mal::printer::pr_seq;
 
-use mal::types::MalVal::{Int, Nil};
+use mal::types::MalVal::Int;
 use mal::types::{MalArgs, MalRet, error, func, func_closure};
 
 #[cfg(target_arch = "riscv32")]
@@ -226,11 +225,10 @@ fn main() -> ! {
     //     &env,
     //     "prn",
     //     func_closure({
-    //         let uart0_ref = uart0_static;
     //         move |a| {
     //             let s = pr_seq(&a, true, "", "", " ");
     //             info!("{}", &s.as_str());
-    //             uart0_ref.borrow_mut().write_full_blocking(s.as_bytes());
+    //             uart0.write_full_blocking(s.as_bytes());
     //             Ok(Nil)
     //         }
     //     }),
@@ -239,12 +237,11 @@ fn main() -> ! {
     //     &env,
     //     "println",
     //     func_closure({
-    //         let uart0_ref = uart0_static;
     //         move |a| {
     //             let s = pr_seq(&a, false, "", "", " ");
     //             info!("{}", &s.as_str());
-    //             uart0_ref.borrow_mut().write_full_blocking(s.as_bytes());
-    //             uart0_ref.borrow_mut().write_full_blocking(b"\r\n");
+    //             uart0.write_full_blocking(s.as_bytes());
+    //             uart0.write_full_blocking(b"\r\n");
     //             Ok(Nil)
     //         }
     //     }),
