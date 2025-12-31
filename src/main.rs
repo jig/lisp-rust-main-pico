@@ -64,6 +64,17 @@ const XTAL_FREQ_HZ: u32 = 12_000_000u32;
 
 static mut GLOBAL_ENV: Option<&'static mal::Env> = None;
 
+type UartType = hal::uart::UartPeripheral<
+    hal::uart::Enabled,
+    hal::pac::UART0,
+    (
+        hal::gpio::Pin<hal::gpio::bank0::Gpio0, hal::gpio::FunctionUart, hal::gpio::PullDown>,
+        hal::gpio::Pin<hal::gpio::bank0::Gpio1, hal::gpio::FunctionUart, hal::gpio::PullDown>,
+    ),
+>;
+
+static mut GLOBAL_UART0: Option<&'static mut UartType> = None;
+
 fn eval_wrapper(a: MalArgs) -> MalRet {
     if a.len() != 1 {
         return error("eval requires exactly 1 argument");
@@ -169,6 +180,12 @@ fn main() -> ! {
         .unwrap();
 
     uart0.write_full_blocking(b"\r\nBorinot Firmware\r\n");
+
+    // Leak uart0 to get 'static lifetime and store in GLOBAL_UART0
+    let uart0_static: &'static mut UartType = Box::leak(Box::new(uart0));
+    unsafe {
+        GLOBAL_UART0 = Some(uart0_static);
+    }
     info!("Borinot Firmware started!");
     // Initialize heap
     {
@@ -221,31 +238,8 @@ fn main() -> ! {
         error("readline not supported on embedded")
     }
     env_sets(&env, "readline", func(readline));
-    // env_sets(
-    //     &env,
-    //     "prn",
-    //     func_closure({
-    //         move |a| {
-    //             let s = pr_seq(&a, true, "", "", " ");
-    //             info!("{}", &s.as_str());
-    //             uart0.write_full_blocking(s.as_bytes());
-    //             Ok(Nil)
-    //         }
-    //     }),
-    // );
-    // env_sets(
-    //     &env,
-    //     "println",
-    //     func_closure({
-    //         move |a| {
-    //             let s = pr_seq(&a, false, "", "", " ");
-    //             info!("{}", &s.as_str());
-    //             uart0.write_full_blocking(s.as_bytes());
-    //             uart0.write_full_blocking(b"\r\n");
-    //             Ok(Nil)
-    //         }
-    //     }),
-    // );
+    env_sets(&env, "prn", func(pico_core::prn));
+    env_sets(&env, "println", func(pico_core::println));
 
     // Leak env to get a 'static reference, then set eval
     let env_static: &'static mal::Env = Box::leak(Box::new(env.clone()));
@@ -258,6 +252,8 @@ fn main() -> ! {
     let mut command: String<BUF_LINE_LENGHT> = String::new();
     loop {
         let mut buf = [0u8; BUF_LINE_LENGHT];
+        // SAFETY: Safe because GLOBAL_UART0 is initialized before this loop
+        let uart0 = unsafe { &mut *core::ptr::addr_of_mut!(GLOBAL_UART0).read().unwrap() };
         match uart0.read_raw(&mut buf) {
             Err(nb::Error::WouldBlock) => {
                 delay.delay_us(1u32);
