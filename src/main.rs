@@ -12,7 +12,7 @@ use hal::clocks::Clock;
 use hal::fugit::RateExtU32;
 
 use mal::types::MalVal::Int;
-use mal::types::{MalArgs, MalRet, error, func};
+use mal::types::{MalArgs, MalRet, error, func, func_closure};
 
 #[cfg(target_arch = "riscv32")]
 use panic_halt as _;
@@ -61,10 +61,6 @@ const XTAL_FREQ_HZ: u32 = 12_000_000u32;
 
 static mut GLOBAL_ENV: Option<&'static mal::Env> = None;
 
-// fn get_timer_ticks(timer: &hal::Timer<impl hal::timer::TimerDevice>) -> u64 {
-//     timer.get_counter().ticks()
-// }
-
 fn eval_wrapper(a: MalArgs) -> MalRet {
     if a.len() != 1 {
         return error("eval requires exactly 1 argument");
@@ -89,6 +85,28 @@ fn create_time_us_func<'a>(
             return error("time-us expects 0 arguments");
         }
         Ok(Int(timer.get_counter().ticks() as i64))
+    }
+}
+
+fn create_time_ms_func<'a>(
+    timer: &'a hal::Timer<impl hal::timer::TimerDevice>,
+) -> impl Fn(MalArgs) -> MalRet + 'a {
+    move |args: MalArgs| {
+        if args.len() != 0 {
+            return error("time-ms expects 0 arguments");
+        }
+        Ok(Int((timer.get_counter().ticks() / 1_000) as i64))
+    }
+}
+
+fn create_time_s_func<'a>(
+    timer: &'a hal::Timer<impl hal::timer::TimerDevice>,
+) -> impl Fn(MalArgs) -> MalRet + 'a {
+    move |args: MalArgs| {
+        if args.len() != 0 {
+            return error("time-s expects 0 arguments");
+        }
+        Ok(Int((timer.get_counter().ticks() / 1_000_000) as i64))
     }
 }
 
@@ -165,7 +183,24 @@ fn main() -> ! {
     initialize_mal_env(&env, vec![]);
 
     env_sets(&env, "slurp", func(slurp));
-    env_sets(&env, "time-us", func(create_time_us_func(&delay)));
+
+    // Leak delay to get 'static lifetime for the closure
+    let delay_static = Box::leak(Box::new(delay.clone()));
+    env_sets(
+        &env,
+        "time-us",
+        func_closure(create_time_us_func(delay_static)),
+    );
+    env_sets(
+        &env,
+        "time-ms",
+        func_closure(create_time_ms_func(delay_static)),
+    );
+    env_sets(
+        &env,
+        "time-s",
+        func_closure(create_time_s_func(delay_static)),
+    );
 
     fn readline(a: MalArgs) -> MalRet {
         if a.len() != 1 {
