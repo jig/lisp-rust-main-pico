@@ -149,42 +149,52 @@ fn main() -> ! {
                 continue;
             }
             Err(nb::Error::Other(err)) => {
-                error!("uart0.read_raw: {:?}", err);
+                warn!("uart0.read_raw: Err: {:?}", err);
                 delay.delay_us(1u32);
                 continue;
             }
             Ok(0) => {
-                info!("uart0.read_raw: Ok(0)");
+                info!("uart0.read_raw: Ok: 0");
                 delay.delay_us(1u32);
                 continue;
             }
             Ok(count) => {
-                led_pin.set_high().unwrap();
                 // cortex_m::asm::bkpt();
                 let value = core::str::from_utf8(&buf[0..count]).unwrap_or("<invalid utf8>");
                 uart0.write_full_blocking(value.as_bytes());
 
                 for c in value.chars() {
                     if c == '\r' {
-                        info!("uart0.read_raw: Ok(\\r)");
+                        uart0.write_full_blocking(b"\r\n");
+                        led_pin.set_high().unwrap();
                         match rep(command.as_str(), &env) {
-                            Ok(out) => info!("{}", out.as_str()),
-                            Err(e) => error!("Error: {}", e.pr_str(true).as_str()),
+                            Ok(out) => {
+                                info!("> {}", &command.as_str());
+                                uart0.write_full_blocking(b"=> ");
+                                uart0.write_full_blocking(out.as_bytes());
+                                uart0.write_full_blocking(b"\r\n");
+                                info!("=> {}", out.as_str())
+                            }
+                            // Err(e.pr_str(true).as_str()) =>
+                            Err(err) => {
+                                let e = err.pr_str(true);
+                                if e.as_str() != "\"no input\"" {
+                                    uart0.write_full_blocking(b"ERR> ");
+                                    uart0.write_full_blocking(e.as_bytes());
+                                    uart0.write_full_blocking(b"\r\n");
+                                    error!("Error: {}", e.as_str())
+                                } else {
+                                    warn!("No input")
+                                }
+                            }
                         }
-                        command.clear();
-                    } else if c == '\n' {
-                        info!("uart0.read_raw: Ok(\\n)");
-                        match rep(command.as_str(), &env) {
-                            Ok(out) => info!("{}", out.as_str()),
-                            Err(e) => error!("Error: {}", e.pr_str(true).as_str()),
-                        }
+                        led_pin.set_low().unwrap();
                         command.clear();
                     } else {
-                        info!("uart0.read_raw: Ok({})", &value);
+                        debug!("uart0.read_raw: Ok({})", &value);
                         let _ = command.push(c);
                     }
                 }
-                led_pin.set_low().unwrap();
             }
         }
     }
