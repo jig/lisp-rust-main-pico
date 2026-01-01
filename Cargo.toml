@@ -5,6 +5,10 @@ name = "lisp-rust-main-pico"
 version = "0.1.0"
 license = "MIT or Apache-2.0"
 
+[[bin]]
+name = "lisp-rust-main-pico"
+test = false
+
 [build-dependencies]
 regex = "1.11.0"
 

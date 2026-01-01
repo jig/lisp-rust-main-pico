@@ -15,6 +15,45 @@ This firmware provides a complete motor control system with quadrature encoder f
 - **Real-time Operation** - 20ms timer interrupt for control loops
 - **Platform Support** - RP2040 (Pico) and RP2350 (Pico 2)
 
+## Install
+
+### Build
+
+```bash
+cargo build --release
+```
+
+### Flash Firmware
+
+#### Option 1: Raspberry Pi GPIO (OpenOCD)
+
+When developing on a Raspberry Pi 4 connected to the Pico via GPIO:
+
+**Wiring (RPi 4 → Pico):**
+- Pin 23 (GPIO 11) → SWCLK (Pico pin 24/GP18)
+- Pin 22 (GPIO 25) → SWDIO (Pico pin 25/GP19)
+- GND → GND
+
+**Flash:**
+```bash
+cargo run-gpio           # or just: cargo run
+```
+
+**Debug in VS Code:**
+- Press F5 and select **"Pico Debug (OpenOCD/RPi GPIO)"**
+
+#### Option 2: Debug Probe (probe-rs)
+
+When using a Raspberry Pi Debug Probe or similar SWD debugger:
+
+**Flash:**
+```bash
+cargo run-probe
+```
+
+**Debug in VS Code:**
+- Press F5 and select **"Pico Debug (probe-rs)"**
+
 ## Hardware Configuration
 
 ### Motor Pins

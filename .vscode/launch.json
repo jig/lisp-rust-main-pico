@@ -36,6 +36,31 @@
       "preLaunchTask": "Build + Generate SBOM (debug)",
       "consoleLogLevel": "Debug",
       "wireProtocol": "Swd"
+    },
+    {
+      "name": "Pico Debug (OpenOCD/RPi GPIO)",
+      "cwd": "${workspaceFolder}",
+      "request": "launch",
+      "type": "cortex-debug",
+      "servertype": "openocd",
+      "configFiles": [
+        "${workspaceFolder}/openocd.cfg"
+      ],
+      "gdbPath": "gdb-multiarch",
+      "device": "RP2040",
+      "svdFile": "${command:raspberry-pi-pico.getSVDPath}",
+      "executable": "${command:raspberry-pi-pico.launchTargetPath}",
+      "interface": "swd",
+      "runToEntryPoint": "main",
+      "showDevDebugOutput": "both",
+      "preLaunchTask": "Build + Generate SBOM (debug)",
+      "toolchainPrefix": "arm-none-eabi",
+      "toolchainPath": "/usr/bin",
+      "serverpath": "openocd",
+      "postRestartCommands": [
+        "break main",
+        "continue"
+      ]
     }
   ]
 }

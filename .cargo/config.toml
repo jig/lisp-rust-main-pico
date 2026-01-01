@@ -26,7 +26,7 @@ target = "thumbv6m-none-eabi"
 # * linker argument -Tlink.x tells the linker to use link.x as the linker
 #   script. This is usually provided by the cortex-m-rt crate, and by default
 #   the version in that crate will include a file called `memory.x` which
-#   describes the particular memory layout for your specific chip. 
+#   describes the particular memory layout for your specific chip.
 # * no-vectorize-loops turns off the loop vectorizer (seeing as the M0+ doesn't
 #   have SIMD)
 linker = "flip-link"
@@ -40,8 +40,10 @@ rustflags = [
 # Use picotool for loading.
 #
 # Load an elf, skipping unchanged flash sectors, verify it, and execute it
-runner = "${PICOTOOL_PATH} load -u -v -x -t elf"
+#runner = "${PICOTOOL_PATH} load -u -v -x -t elf"
 #runner = "probe-rs run --chip ${CHIP} --protocol swd"
+# Use OpenOCD for loading via Raspberry Pi GPIO
+runner = "openocd -f interface/raspberrypi-swd.cfg -f target/rp2040.cfg -c 'adapter speed 5000' -c 'program {} verify reset exit'"
 
 # This is the hard-float ABI for Arm mode.
 #
@@ -55,7 +57,7 @@ runner = "${PICOTOOL_PATH} load -u -v -x -t elf"
 # * linker argument -Tlink.x tells the linker to use link.x as a linker script.
 #   This is usually provided by the cortex-m-rt crate, and by default the
 #   version in that crate will include a file called `memory.x` which describes
-#   the particular memory layout for your specific chip. 
+#   the particular memory layout for your specific chip.
 # * linker argument -Tdefmt.x also tells the linker to use `defmt.x` as a
 #   secondary linker script. This is required to make defmt_rtt work.
 rustflags = [
@@ -68,8 +70,10 @@ rustflags = [
 # Use picotool for loading.
 #
 # Load an elf, skipping unchanged flash sectors, verify it, and execute it
-runner = "${PICOTOOL_PATH} load -u -v -x -t elf"
+#runner = "${PICOTOOL_PATH} load -u -v -x -t elf"
 #runner = "probe-rs run --chip ${CHIP} --protocol swd"
+# Use OpenOCD for loading via Raspberry Pi GPIO
+runner = "openocd -f interface/raspberrypi-swd.cfg -f target/rp2350.cfg -c 'adapter speed 5000' -c 'program {} verify reset exit'"
 
 # This is the soft-float ABI for RISC-V mode.
 #
@@ -95,8 +99,14 @@ rustflags = [
 # Use picotool for loading.
 #
 # Load an elf, skipping unchanged flash sectors, verify it, and execute it
-runner = "${PICOTOOL_PATH} load -u -v -x -t elf"
+#runner = "${PICOTOOL_PATH} load -u -v -x -t elf"
 #runner = "probe-rs run --chip ${CHIP} --protocol swd"
+# Use OpenOCD for loading via Raspberry Pi GPIO
+runner = "openocd -f interface/raspberrypi-swd.cfg -f target/rp2350.cfg -c 'adapter speed 5000' -c 'program {} verify reset exit'"
+
+[alias]
+run-gpio = "run"
+run-probe = "run --config 'target.thumbv6m-none-eabi.runner=\"probe-rs run --chip RP2040 --protocol swd\"'"
 
 [env]
 DEFMT_LOG = "debug"
