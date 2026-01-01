@@ -164,77 +164,65 @@ pub fn init_motors(
         .gpio(6)
         .gpio_ctrl()
         .write(|w| unsafe { w.funcsel().bits(4) });
-    pac_pads.gpio(6).write(|w| {
-        w.od().clear_bit();
-        w.ie().set_bit()
-    });
+    pac_pads.gpio(6).write(|w| unsafe { w.bits(0x56) });
 
     // GPIO9 -> PWM4B (RL)
     pac_io
         .gpio(9)
         .gpio_ctrl()
         .write(|w| unsafe { w.funcsel().bits(4) });
-    pac_pads.gpio(9).write(|w| {
-        w.od().clear_bit();
-        w.ie().set_bit()
-    });
+    pac_pads.gpio(9).write(|w| unsafe { w.bits(0x56) });
 
     // GPIO3 -> PWM1B (FR)
     pac_io
         .gpio(3)
         .gpio_ctrl()
         .write(|w| unsafe { w.funcsel().bits(4) });
-    pac_pads.gpio(3).write(|w| {
-        w.od().clear_bit();
-        w.ie().set_bit()
-    });
+    pac_pads.gpio(3).write(|w| unsafe { w.bits(0x56) });
 
     // GPIO20 -> PWM2A (RR)
     pac_io
         .gpio(20)
         .gpio_ctrl()
         .write(|w| unsafe { w.funcsel().bits(4) });
-    pac_pads.gpio(20).write(|w| {
-        w.od().clear_bit();
-        w.ie().set_bit()
-    });
+    pac_pads.gpio(20).write(|w| unsafe { w.bits(0x56) });
 
     // Configure PWM slices
     // PWM1 (FR)
     pac_pwm
         .ch(1)
         .div()
-        .write(|w| unsafe { w.int().bits(divider) });
+        .write(|w| unsafe { w.bits((divider as u32) << 4) });
     pac_pwm.ch(1).top().write(|w| unsafe { w.bits(top as u32) });
-    pac_pwm.ch(1).cc().write(|w| unsafe { w.b().bits(0) });
-    pac_pwm.ch(1).csr().write(|w| w.en().set_bit());
+    pac_pwm.ch(1).cc().write(|w| unsafe { w.bits(0) });
+    pac_pwm.ch(1).csr().write(|w| unsafe { w.bits(0x0001) });
 
     // PWM2 (RR)
     pac_pwm
         .ch(2)
         .div()
-        .write(|w| unsafe { w.int().bits(divider) });
+        .write(|w| unsafe { w.bits((divider as u32) << 4) });
     pac_pwm.ch(2).top().write(|w| unsafe { w.bits(top as u32) });
-    pac_pwm.ch(2).cc().write(|w| unsafe { w.a().bits(0) });
-    pac_pwm.ch(2).csr().write(|w| w.en().set_bit());
+    pac_pwm.ch(2).cc().write(|w| unsafe { w.bits(0) });
+    pac_pwm.ch(2).csr().write(|w| unsafe { w.bits(0x0001) });
 
     // PWM3 (FL)
     pac_pwm
         .ch(3)
         .div()
-        .write(|w| unsafe { w.int().bits(divider) });
+        .write(|w| unsafe { w.bits((divider as u32) << 4) });
     pac_pwm.ch(3).top().write(|w| unsafe { w.bits(top as u32) });
-    pac_pwm.ch(3).cc().write(|w| unsafe { w.a().bits(0) });
-    pac_pwm.ch(3).csr().write(|w| w.en().set_bit());
+    pac_pwm.ch(3).cc().write(|w| unsafe { w.bits(0) });
+    pac_pwm.ch(3).csr().write(|w| unsafe { w.bits(0x0001) });
 
     // PWM4 (RL)
     pac_pwm
         .ch(4)
         .div()
-        .write(|w| unsafe { w.int().bits(divider) });
+        .write(|w| unsafe { w.bits((divider as u32) << 4) });
     pac_pwm.ch(4).top().write(|w| unsafe { w.bits(top as u32) });
-    pac_pwm.ch(4).cc().write(|w| unsafe { w.b().bits(0) });
-    pac_pwm.ch(4).csr().write(|w| w.en().set_bit());
+    pac_pwm.ch(4).cc().write(|w| unsafe { w.bits(0) });
+    pac_pwm.ch(4).csr().write(|w| unsafe { w.bits(0x0001) });
 
     // Configure GPIO enable pins as outputs (using SIO)
     let enable_pins = [7u8, 8, 4, 5, 10, 11, 21, 22];
@@ -248,10 +236,9 @@ pub fn init_motors(
                 .gpio(pin as usize)
                 .gpio_ctrl()
                 .write(|w| w.funcsel().sio());
-            pac_pads.gpio(pin as usize).write(|w| {
-                w.od().clear_bit();
-                w.ie().set_bit()
-            });
+            pac_pads
+                .gpio(pin as usize)
+                .write(|w| unsafe { w.bits(0x56) });
 
             // Set output enable
             sio.gpio_oe_set().write(|w| w.bits(1 << pin));
@@ -278,22 +265,18 @@ pub fn init_motors(
                 .gpio(pin_a as usize)
                 .gpio_ctrl()
                 .write(|w| w.funcsel().bits(5)); // SIO
-            pac_pads.gpio(pin_a as usize).write(|w| {
-                w.od().clear_bit();
-                w.ie().set_bit();
-                w.pue().set_bit() // Pull-up enable
-            });
+            pac_pads
+                .gpio(pin_a as usize)
+                .write(|w| unsafe { w.bits(0x5E) }); // IE + pullup + 8mA
 
             // Configure pin B
             pac_io
                 .gpio(pin_b as usize)
                 .gpio_ctrl()
                 .write(|w| w.funcsel().bits(5)); // SIO
-            pac_pads.gpio(pin_b as usize).write(|w| {
-                w.od().clear_bit();
-                w.ie().set_bit();
-                w.pue().set_bit() // Pull-up enable
-            });
+            pac_pads
+                .gpio(pin_b as usize)
+                .write(|w| unsafe { w.bits(0x5E) }); // IE + pullup + 8mA
 
             // Set as input (clear output enable)
             sio.gpio_oe_clr()
@@ -366,31 +349,41 @@ pub fn init_motors(
     resets.reset().modify(|_, w| w.pwm().clear_bit());
     while resets.reset_done().read().pwm().bit_is_clear() {}
 
+    // Reset IO_BANK0 to ensure GPIO registers are writable
+    resets.reset().modify(|_, w| w.io_bank0().set_bit());
+    resets.reset().modify(|_, w| w.io_bank0().clear_bit());
+    while resets.reset_done().read().io_bank0().bit_is_clear() {}
+
+    // Reset PADS_BANK0
+    resets.reset().modify(|_, w| w.pads_bank0().set_bit());
+    resets.reset().modify(|_, w| w.pads_bank0().clear_bit());
+    while resets.reset_done().read().pads_bank0().bit_is_clear() {}
+
     // Configure GPIO functions for PWM (funcsel=4 for PWM on RP2040)
     unsafe {
-        // GPIO6 -> PWM3A (FL)
-        pac_io.gpio(6).gpio_ctrl().write(|w| w.funcsel().bits(4));
+        // GPIO6 -> PWM3A (FL) - ONLY funcsel=4, NO override bits
+        pac_io.gpio(6).gpio_ctrl().write(|w| w.bits(0x0004));
         pac_pads.gpio(6).write(|w| {
             w.od().clear_bit();
             w.ie().set_bit()
         });
 
         // GPIO9 -> PWM4B (RL)
-        pac_io.gpio(9).gpio_ctrl().write(|w| w.funcsel().bits(4));
+        pac_io.gpio(9).gpio_ctrl().write(|w| w.bits(0x0004));
         pac_pads.gpio(9).write(|w| {
             w.od().clear_bit();
             w.ie().set_bit()
         });
 
         // GPIO3 -> PWM1B (FR)
-        pac_io.gpio(3).gpio_ctrl().write(|w| w.funcsel().bits(4));
+        pac_io.gpio(3).gpio_ctrl().write(|w| w.bits(0x0004));
         pac_pads.gpio(3).write(|w| {
             w.od().clear_bit();
             w.ie().set_bit()
         });
 
         // GPIO20 -> PWM2A (RR)
-        pac_io.gpio(20).gpio_ctrl().write(|w| w.funcsel().bits(4));
+        pac_io.gpio(20).gpio_ctrl().write(|w| w.bits(0x0004));
         pac_pads.gpio(20).write(|w| {
             w.od().clear_bit();
             w.ie().set_bit()
@@ -400,25 +393,25 @@ pub fn init_motors(
         // PWM1 (FR)
         pac_pwm.ch(1).div().write(|w| w.int().bits(divider));
         pac_pwm.ch(1).top().write(|w| w.bits(top as u32));
-        pac_pwm.ch(1).cc().write(|w| w.b().bits(0));
+        pac_pwm.ch(1).cc().write(|w| w.bits(0));
         pac_pwm.ch(1).csr().write(|w| w.en().set_bit());
 
         // PWM2 (RR)
         pac_pwm.ch(2).div().write(|w| w.int().bits(divider));
         pac_pwm.ch(2).top().write(|w| w.bits(top as u32));
-        pac_pwm.ch(2).cc().write(|w| w.a().bits(0));
+        pac_pwm.ch(2).cc().write(|w| w.bits(0));
         pac_pwm.ch(2).csr().write(|w| w.en().set_bit());
 
         // PWM3 (FL)
         pac_pwm.ch(3).div().write(|w| w.int().bits(divider));
         pac_pwm.ch(3).top().write(|w| w.bits(top as u32));
-        pac_pwm.ch(3).cc().write(|w| w.a().bits(0));
+        pac_pwm.ch(3).cc().write(|w| w.bits(0));
         pac_pwm.ch(3).csr().write(|w| w.en().set_bit());
 
         // PWM4 (RL)
         pac_pwm.ch(4).div().write(|w| w.int().bits(divider));
         pac_pwm.ch(4).top().write(|w| w.bits(top as u32));
-        pac_pwm.ch(4).cc().write(|w| w.b().bits(0));
+        pac_pwm.ch(4).cc().write(|w| w.bits(0));
         pac_pwm.ch(4).csr().write(|w| w.en().set_bit());
     }
 
@@ -459,22 +452,22 @@ pub fn init_motors(
         let _io = &*hal::pac::IO_BANK0::PTR;
 
         for (motor_idx, &(pin_a, pin_b)) in encoder_pins.iter().enumerate() {
-            // Configure pin A
+            // Configure pin A (funcsel=5 for SIO)
             pac_io
                 .gpio(pin_a as usize)
                 .gpio_ctrl()
-                .write(|w| w.funcsel().sio());
+                .write(|w| unsafe { w.bits(0x0005) });
             pac_pads.gpio(pin_a as usize).write(|w| {
                 w.od().clear_bit();
                 w.ie().set_bit();
                 w.pue().set_bit() // Pull-up enable
             });
 
-            // Configure pin B
+            // Configure pin B (funcsel=5 for SIO)
             pac_io
                 .gpio(pin_b as usize)
                 .gpio_ctrl()
-                .write(|w| w.funcsel().sio());
+                .write(|w| unsafe { w.bits(0x0005) });
             pac_pads.gpio(pin_b as usize).write(|w| {
                 w.od().clear_bit();
                 w.ie().set_bit();
@@ -523,6 +516,7 @@ pub fn init_motors(
 /// Safe to call from interrupts
 pub fn set_motor_level(motor_idx: usize, level: i32) {
     if motor_idx > 3 {
+        defmt::warn!("Invalid motor index: {}", motor_idx);
         return;
     }
 
@@ -532,6 +526,8 @@ pub fn set_motor_level(motor_idx: usize, level: i32) {
         defmt::warn!("Motors not initialized, call init_motors first!");
         return;
     }
+
+    defmt::debug!("set_motor_level: motor={} level={}", motor_idx, level);
 
     #[cfg(rp2350)]
     unsafe {
@@ -599,6 +595,11 @@ pub fn set_motor_level(motor_idx: usize, level: i32) {
 
     #[cfg(rp2040)]
     unsafe {
+        defmt::info!(
+            "set_motor_level rp2040: motor={} level={}",
+            motor_idx,
+            level
+        );
         let pwm = &*hal::pac::PWM::PTR;
         let sio = &*hal::pac::SIO::PTR;
 
@@ -617,10 +618,17 @@ pub fn set_motor_level(motor_idx: usize, level: i32) {
                 .write(|w| w.bits((1 << ena0_pin) | (1 << ena1_pin)));
 
             // Set PWM to 0
+            let cc_val = pwm.ch(slice_num).cc().read().bits();
             if channel == 0 {
-                pwm.ch(slice_num).cc().modify(|_, w| w.a().bits(0));
+                // Clear A, preserve B
+                pwm.ch(slice_num)
+                    .cc()
+                    .write(|w| w.bits(cc_val & 0xFFFF0000));
             } else {
-                pwm.ch(slice_num).cc().modify(|_, w| w.b().bits(0));
+                // Clear B, preserve A
+                pwm.ch(slice_num)
+                    .cc()
+                    .write(|w| w.bits(cc_val & 0x0000FFFF));
             }
         } else if level < 0 {
             // Reverse direction
@@ -635,10 +643,17 @@ pub fn set_motor_level(motor_idx: usize, level: i32) {
             sio.gpio_out_clr().write(|w| w.bits(1 << ena1_pin));
 
             // Set PWM level
+            let cc_val = pwm.ch(slice_num).cc().read().bits();
             if channel == 0 {
-                pwm.ch(slice_num).cc().modify(|_, w| w.a().bits(abs_level));
+                // Set A, preserve B
+                pwm.ch(slice_num)
+                    .cc()
+                    .write(|w| w.bits((cc_val & 0xFFFF0000) | (abs_level as u32)));
             } else {
-                pwm.ch(slice_num).cc().modify(|_, w| w.b().bits(abs_level));
+                // Set B, preserve A
+                pwm.ch(slice_num)
+                    .cc()
+                    .write(|w| w.bits((cc_val & 0x0000FFFF) | ((abs_level as u32) << 16)));
             }
         } else {
             // Forward direction
@@ -653,10 +668,35 @@ pub fn set_motor_level(motor_idx: usize, level: i32) {
             sio.gpio_out_set().write(|w| w.bits(1 << ena1_pin));
 
             // Set PWM level
+            let cc_val = pwm.ch(slice_num).cc().read().bits();
             if channel == 0 {
-                pwm.ch(slice_num).cc().modify(|_, w| w.a().bits(abs_level));
+                // Set A, preserve B
+                let new_val = (cc_val & 0xFFFF0000) | (abs_level as u32);
+                pwm.ch(slice_num).cc().write(|w| w.bits(new_val));
+
+                // DEBUG: Read back to verify
+                let verify = pwm.ch(slice_num).cc().read().bits();
+                let gpio_state = sio.gpio_out().read().bits();
+                defmt::debug!(
+                    "PWM written: new_val={:#010x}, verify={:#010x}, gpio={:#010x}",
+                    new_val,
+                    verify,
+                    gpio_state
+                );
             } else {
-                pwm.ch(slice_num).cc().modify(|_, w| w.b().bits(abs_level));
+                // Set B, preserve A
+                let new_val = (cc_val & 0x0000FFFF) | ((abs_level as u32) << 16);
+                pwm.ch(slice_num).cc().write(|w| w.bits(new_val));
+
+                // DEBUG: Read back to verify
+                let verify = pwm.ch(slice_num).cc().read().bits();
+                let gpio_state = sio.gpio_out().read().bits();
+                defmt::debug!(
+                    "PWM written: new_val={:#010x}, verify={:#010x}, gpio={:#010x}",
+                    new_val,
+                    verify,
+                    gpio_state
+                );
             }
         }
     }
