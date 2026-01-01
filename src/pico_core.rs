@@ -1,5 +1,7 @@
 // Raspberry Pi Pico specific core functions
 
+use alloc::rc::Rc;
+use alloc::vec;
 use core::cell::RefCell;
 use core::ptr::addr_of_mut;
 use cortex_m::interrupt::free;
@@ -235,7 +237,7 @@ pub fn pid_set_limits(args: MalArgs) -> MalRet {
 /// Move a single motor
 /// Usage: (motor-move motor-index level)
 /// motor-index: 0=FL, 1=FR, 2=RL, 3=RR
-/// level: -4999 to 4999 (negative = reverse, positive = forward, 0 = stop)
+/// level: -1.0 to +1.0 (negative = reverse, positive = forward, 0 = stop)
 pub fn motor_move(args: MalArgs) -> MalRet {
     if args.len() != 2 {
         return error("motor-move expects 2 arguments (motor-index level)");
@@ -251,17 +253,20 @@ pub fn motor_move(args: MalArgs) -> MalRet {
     }
 
     let level = match &args[1] {
-        Int(i) => *i as i32,
-        Float(f) => *f as i32,
+        Float(f) => *f,
+        Int(i) => *i as f32,
         _ => return error("level must be a number"),
     };
 
-    if level < -4999 || level > 4999 {
-        return error("level must be between -4999 and 4999");
+    if level < -1.0 || level > 1.0 {
+        return error("level must be between -1.0 and +1.0");
     }
 
+    // Convert -1.0..+1.0 to -4999..+4999
+    let pwm_level = (level * 4999.0) as i32;
+
     free(|_cs| {
-        crate::motor::set_motor_level(motor_idx as usize, level);
+        crate::motor::set_motor_level(motor_idx as usize, pwm_level);
     });
 
     Ok(Nil)
@@ -269,7 +274,7 @@ pub fn motor_move(args: MalArgs) -> MalRet {
 
 /// Move all motors at once
 /// Usage: (motors-move fl fr rl rr)
-/// Each parameter: -4999 to 4999
+/// Each parameter: -1.0 to +1.0
 pub fn motors_move(args: MalArgs) -> MalRet {
     if args.len() != 4 {
         return error("motors-move expects 4 arguments (fl fr rl rr)");
@@ -277,15 +282,18 @@ pub fn motors_move(args: MalArgs) -> MalRet {
 
     let mut levels = [0i32; 4];
     for i in 0..4 {
-        levels[i] = match &args[i] {
-            Int(val) => *val as i32,
-            Float(f) => *f as i32,
+        let level_f = match &args[i] {
+            Float(f) => *f,
+            Int(val) => *val as f32,
             _ => return error("all levels must be numbers"),
         };
 
-        if levels[i] < -4999 || levels[i] > 4999 {
-            return error("all levels must be between -4999 and 4999");
+        if level_f < -1.0 || level_f > 1.0 {
+            return error("all levels must be between -1.0 and +1.0");
         }
+
+        // Convert -1.0..+1.0 to -4999..+4999
+        levels[i] = (level_f * 4999.0) as i32;
     }
 
     free(|_cs| {
@@ -348,4 +356,22 @@ pub fn encoders_reset(_args: MalArgs) -> MalRet {
     });
 
     Ok(Nil)
+}
+
+/// Get all encoder counts as a list
+/// Usage: (encoders-get) => (fl fr rl rr)
+pub fn encoders_get(_args: MalArgs) -> MalRet {
+    if _args.len() != 0 {
+        return error("encoders-get expects 0 arguments");
+    }
+    let encoders = crate::motor::get_all_encoders();
+    Ok(mal::types::MalVal::List(
+        Rc::new(vec![
+            Int(encoders[0] as i64),
+            Int(encoders[1] as i64),
+            Int(encoders[2] as i64),
+            Int(encoders[3] as i64),
+        ]),
+        Rc::new(Nil),
+    ))
 }

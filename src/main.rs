@@ -183,16 +183,28 @@ fn main() -> ! {
     #[cfg(rp2350)]
     let mut delay = hal::Timer::new_timer0(pac.TIMER0, &mut pac.RESETS, &clocks);
 
+    // Initialize motor control BEFORE creating Pins (which would consume IO_BANK0/PADS_BANK0)
+    #[cfg(rp2350)]
+    motor::init_motors(
+        pac.PWM,
+        pac.IO_BANK0,
+        pac.PADS_BANK0,
+        &mut pac.RESETS,
+        clocks.system_clock.freq().to_Hz(),
+    );
+
     // The single-cycle I/O block controls our GPIO pins
     let sio = hal::Sio::new(pac.SIO);
 
-    // Set the pins to their default state
-    let pins = hal::gpio::Pins::new(
-        pac.IO_BANK0,
-        pac.PADS_BANK0,
-        sio.gpio_bank0,
-        &mut pac.RESETS,
-    );
+    // Note: Motor pins already configured by init_motors()
+    // We need to steal IO_BANK0 and PADS_BANK0 since they were consumed by motor init
+    // This is safe because motor control uses direct PAC register access after init
+    let pins = unsafe {
+        let io = hal::pac::IO_BANK0::steal();
+        let pads = hal::pac::PADS_BANK0::steal();
+        let mut resets = hal::pac::RESETS::steal();
+        hal::gpio::Pins::new(io, pads, sio.gpio_bank0, &mut resets)
+    };
 
     // Configure GPIO25 as output for timer interrupt test (onboard LED)
     let test_pin = pins.gpio25.into_push_pull_output();
@@ -240,7 +252,18 @@ fn main() -> ! {
         NVIC::unmask(hal::pac::Interrupt::TIMER_IRQ_0);
     }
 
+    // Enable GPIO bank 0 interrupt for encoders
+    #[cfg(rp2350)]
+    unsafe {
+        NVIC::unmask(hal::pac::Interrupt::IO_IRQ_BANK0);
+    }
+    #[cfg(rp2040)]
+    unsafe {
+        NVIC::unmask(hal::pac::Interrupt::IO_IRQ_BANK0);
+    }
+
     info!("Timer alarm configured for 20ms");
+    info!("Encoder interrupts enabled");
 
     // Initialize heap
     {
@@ -301,6 +324,7 @@ fn main() -> ! {
     env_sets(&env, "motor-move", func(pico_core::motor_move));
     env_sets(&env, "motors-move", func(pico_core::motors_move));
     env_sets(&env, "encoder-get", func(pico_core::encoder_get));
+    env_sets(&env, "encoders-get", func(pico_core::encoders_get));
     env_sets(&env, "encoder-reset", func(pico_core::encoder_reset));
     env_sets(&env, "encoders-reset", func(pico_core::encoders_reset));
 
@@ -434,6 +458,19 @@ fn TIMER_IRQ_0() {
             let _ = pin.toggle();
         }
     });
+}
+
+/// GPIO Bank 0 interrupt handler - processes encoder quadrature signals
+#[cfg(rp2350)]
+#[interrupt]
+fn IO_IRQ_BANK0() {
+    motor::process_encoder_interrupts();
+}
+
+#[cfg(rp2040)]
+#[interrupt]
+fn IO_IRQ_BANK0() {
+    motor::process_encoder_interrupts();
 }
 
 /// Program metadata for `picotool info`
