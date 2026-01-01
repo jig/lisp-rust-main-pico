@@ -15,6 +15,9 @@ pub struct PidController {
     pub output_min: f32,
     pub output_max: f32,
 
+    // Time delta (dt) in seconds
+    pub dt: f32,
+
     // Internal state
     integral: f32,
     prev_error: f32,
@@ -33,6 +36,7 @@ impl PidController {
             setpoint: 0.0,
             output_min: -100.0,
             output_max: 100.0,
+            dt: 0.02, // Default 20ms
             integral: 0.0,
             prev_error: 0.0,
             enabled: false,
@@ -47,6 +51,7 @@ impl PidController {
 
     /// Update the PID controller with current measurement
     /// Returns the control output
+    #[allow(dead_code)]
     pub fn update(&mut self, measurement: f32, dt: f32) -> f32 {
         if !self.enabled {
             return 0.0;
@@ -96,6 +101,7 @@ pub static GLOBAL_PID: Mutex<RefCell<PidController>> =
 
 /// PID update function to be called from ISR
 /// dt should be in seconds (e.g., 0.2 for 200ms)
+#[allow(dead_code)]
 pub fn pid_update_isr(measurement: f32, dt: f32) -> f32 {
     cortex_m::interrupt::free(|cs| {
         let mut pid = GLOBAL_PID.borrow(cs).borrow_mut();

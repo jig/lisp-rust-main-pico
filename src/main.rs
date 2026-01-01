@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 
+mod motor;
 mod pico_core;
 mod pid;
 
@@ -98,6 +99,12 @@ static GLOBAL_ALARM: Mutex<RefCell<Option<AlarmType>>> = Mutex::new(RefCell::new
 
 // Counter for ISR debugging
 static ISR_COUNTER: Mutex<RefCell<u32>> = Mutex::new(RefCell::new(0));
+
+// Accumulated time in microseconds for logging
+static ISR_TIME_ACCUM_US: Mutex<RefCell<u32>> = Mutex::new(RefCell::new(0));
+
+// Timer period in microseconds (default 20ms = 20_000us)
+pub static TIMER_PERIOD_US: Mutex<RefCell<u32>> = Mutex::new(RefCell::new(20_000));
 
 fn eval_wrapper(a: MalArgs) -> MalRet {
     if a.len() != 1 {
@@ -215,9 +222,9 @@ fn main() -> ! {
     }
     info!("Borinot Firmware started!");
 
-    // Configure alarm for 200ms periodic interrupt
+    // Configure alarm for 20ms periodic interrupt
     let mut alarm = delay.alarm_0().unwrap();
-    let _ = alarm.schedule(MicrosDurationU32::from_ticks(200_000));
+    let _ = alarm.schedule(MicrosDurationU32::from_ticks(20_000));
     alarm.enable_interrupt();
     free(|cs| {
         GLOBAL_ALARM.borrow(cs).replace(Some(alarm));
@@ -233,7 +240,7 @@ fn main() -> ! {
         NVIC::unmask(hal::pac::Interrupt::TIMER_IRQ_0);
     }
 
-    info!("Timer alarm configured for 200ms");
+    info!("Timer alarm configured for 20ms");
 
     // Initialize heap
     {
@@ -283,11 +290,19 @@ fn main() -> ! {
     env_sets(&env, "mem-free", func(pico_core::mem_free));
 
     // PID functions
+    env_sets(&env, "pid-set-dt", func(pico_core::pid_set_dt));
     env_sets(&env, "pid-set-gains", func(pico_core::pid_set_gains));
     env_sets(&env, "pid-set-setpoint", func(pico_core::pid_set_setpoint));
     env_sets(&env, "pid-enable", func(pico_core::pid_enable));
     env_sets(&env, "pid-reset", func(pico_core::pid_reset));
     env_sets(&env, "pid-set-limits", func(pico_core::pid_set_limits));
+
+    // Motor control functions
+    env_sets(&env, "motor-move", func(pico_core::motor_move));
+    env_sets(&env, "motors-move", func(pico_core::motors_move));
+    env_sets(&env, "encoder-get", func(pico_core::encoder_get));
+    env_sets(&env, "encoder-reset", func(pico_core::encoder_reset));
+    env_sets(&env, "encoders-reset", func(pico_core::encoders_reset));
 
     // Leak env to get a 'static reference, then set eval
     let env_static: &'static mal::Env = Box::leak(Box::new(env.clone()));
@@ -357,7 +372,7 @@ fn main() -> ! {
     }
 }
 
-/// Timer interrupt handler - runs every 200ms
+/// Timer interrupt handler - runs every 20ms
 /// Toggles GPIO25 (onboard LED) to validate the timer is working
 #[cfg(rp2350)]
 #[interrupt]
@@ -367,15 +382,20 @@ fn TIMER0_IRQ_0() {
         let mut counter = ISR_COUNTER.borrow(cs).borrow_mut();
         *counter = counter.wrapping_add(1);
 
-        // Log every 10 interrupts (2 seconds)
-        if *counter % 10 == 0 {
+        // Accumulate time and log every second
+        let period_us = *TIMER_PERIOD_US.borrow(cs).borrow();
+        let mut time_accum = ISR_TIME_ACCUM_US.borrow(cs).borrow_mut();
+        *time_accum += period_us;
+        if *time_accum >= 1_000_000 {
             defmt::info!("ISR executed {} times", *counter);
+            *time_accum -= 1_000_000;
         }
+
         // Clear the interrupt
         if let Some(ref mut alarm) = *GLOBAL_ALARM.borrow(cs).borrow_mut() {
             alarm.clear_interrupt();
-            // Schedule next interrupt (200ms from now)
-            let _ = alarm.schedule(MicrosDurationU32::from_ticks(200_000));
+            // Schedule next interrupt using dynamic period
+            let _ = alarm.schedule(MicrosDurationU32::from_ticks(period_us));
         }
 
         // Toggle test pin
@@ -393,16 +413,20 @@ fn TIMER_IRQ_0() {
         let mut counter = ISR_COUNTER.borrow(cs).borrow_mut();
         *counter = counter.wrapping_add(1);
 
-        // Log every 10 interrupts (2 seconds)
-        if *counter % 10 == 0 {
+        // Accumulate time and log every second
+        let period_us = *TIMER_PERIOD_US.borrow(cs).borrow();
+        let mut time_accum = ISR_TIME_ACCUM_US.borrow(cs).borrow_mut();
+        *time_accum += period_us;
+        if *time_accum >= 1_000_000 {
             defmt::info!("ISR executed {} times", *counter);
+            *time_accum -= 1_000_000;
         }
 
         // Clear the interrupt
         if let Some(ref mut alarm) = *GLOBAL_ALARM.borrow(cs).borrow_mut() {
             alarm.clear_interrupt();
-            // Schedule next interrupt (200ms from now)
-            let _ = alarm.schedule(MicrosDurationU32::from_ticks(200_000));
+            // Schedule next interrupt using dynamic period
+            let _ = alarm.schedule(MicrosDurationU32::from_ticks(period_us));
         }
 
         // Toggle test pin
