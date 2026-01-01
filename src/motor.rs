@@ -6,7 +6,7 @@
 //! - Quadrature encoder support with GPIO interrupts
 
 use core::cell::RefCell;
-use cortex_m::interrupt::{free, Mutex};
+use cortex_m::interrupt::{Mutex, free};
 
 #[cfg(rp2350)]
 use crate::hal;
@@ -54,7 +54,8 @@ pub const MAX_PWM_LEVEL: i32 = 4999;
 static ENCODERS: Mutex<RefCell<[i32; 4]>> = Mutex::new(RefCell::new([0, 0, 0, 0]));
 
 /// Previous encoder state for quadrature decoding [motor_idx][0=A, 1=B]
-static ENCODER_PREV_STATE: Mutex<RefCell<[[bool; 2]; 4]>> = Mutex::new(RefCell::new([[false; 2]; 4]));
+static ENCODER_PREV_STATE: Mutex<RefCell<[[bool; 2]; 4]>> =
+    Mutex::new(RefCell::new([[false; 2]; 4]));
 
 /// Store PWM TOP values for duty cycle calculations
 /// These are set during initialization and used in set_motor_level
@@ -137,7 +138,12 @@ pub fn init_motors(
 
     // Calculate PWM parameters for 25kHz
     let (divider, top) = calculate_pwm_params(sys_freq_hz, MOTOR_PWM_FREQ_HZ);
-    defmt::info!("PWM: div={}, top={}, freq={}Hz", divider, top, sys_freq_hz / (divider as u32 * (top as u32 + 1)));
+    defmt::info!(
+        "PWM: div={}, top={}, freq={}Hz",
+        divider,
+        top,
+        sys_freq_hz / (divider as u32 * (top as u32 + 1))
+    );
 
     // Store TOP values
     free(|cs| {
@@ -154,28 +160,40 @@ pub fn init_motors(
 
     // Configure GPIO functions for PWM (funcsel=4 for PWM on RP2350)
     // GPIO6 -> PWM3A (FL)
-    pac_io.gpio(6).gpio_ctrl().write(|w| unsafe { w.funcsel().bits(4) });
+    pac_io
+        .gpio(6)
+        .gpio_ctrl()
+        .write(|w| unsafe { w.funcsel().bits(4) });
     pac_pads.gpio(6).write(|w| {
         w.od().clear_bit();
         w.ie().set_bit()
     });
 
     // GPIO9 -> PWM4B (RL)
-    pac_io.gpio(9).gpio_ctrl().write(|w| unsafe { w.funcsel().bits(4) });
+    pac_io
+        .gpio(9)
+        .gpio_ctrl()
+        .write(|w| unsafe { w.funcsel().bits(4) });
     pac_pads.gpio(9).write(|w| {
         w.od().clear_bit();
         w.ie().set_bit()
     });
 
     // GPIO3 -> PWM1B (FR)
-    pac_io.gpio(3).gpio_ctrl().write(|w| unsafe { w.funcsel().bits(4) });
+    pac_io
+        .gpio(3)
+        .gpio_ctrl()
+        .write(|w| unsafe { w.funcsel().bits(4) });
     pac_pads.gpio(3).write(|w| {
         w.od().clear_bit();
         w.ie().set_bit()
     });
 
     // GPIO20 -> PWM2A (RR)
-    pac_io.gpio(20).gpio_ctrl().write(|w| unsafe { w.funcsel().bits(4) });
+    pac_io
+        .gpio(20)
+        .gpio_ctrl()
+        .write(|w| unsafe { w.funcsel().bits(4) });
     pac_pads.gpio(20).write(|w| {
         w.od().clear_bit();
         w.ie().set_bit()
@@ -183,25 +201,37 @@ pub fn init_motors(
 
     // Configure PWM slices
     // PWM1 (FR)
-    pac_pwm.ch(1).div().write(|w| unsafe { w.int().bits(divider) });
+    pac_pwm
+        .ch(1)
+        .div()
+        .write(|w| unsafe { w.int().bits(divider) });
     pac_pwm.ch(1).top().write(|w| unsafe { w.bits(top as u32) });
     pac_pwm.ch(1).cc().write(|w| unsafe { w.b().bits(0) });
     pac_pwm.ch(1).csr().write(|w| w.en().set_bit());
 
     // PWM2 (RR)
-    pac_pwm.ch(2).div().write(|w| unsafe { w.int().bits(divider) });
+    pac_pwm
+        .ch(2)
+        .div()
+        .write(|w| unsafe { w.int().bits(divider) });
     pac_pwm.ch(2).top().write(|w| unsafe { w.bits(top as u32) });
     pac_pwm.ch(2).cc().write(|w| unsafe { w.a().bits(0) });
     pac_pwm.ch(2).csr().write(|w| w.en().set_bit());
 
     // PWM3 (FL)
-    pac_pwm.ch(3).div().write(|w| unsafe { w.int().bits(divider) });
+    pac_pwm
+        .ch(3)
+        .div()
+        .write(|w| unsafe { w.int().bits(divider) });
     pac_pwm.ch(3).top().write(|w| unsafe { w.bits(top as u32) });
     pac_pwm.ch(3).cc().write(|w| unsafe { w.a().bits(0) });
     pac_pwm.ch(3).csr().write(|w| w.en().set_bit());
 
     // PWM4 (RL)
-    pac_pwm.ch(4).div().write(|w| unsafe { w.int().bits(divider) });
+    pac_pwm
+        .ch(4)
+        .div()
+        .write(|w| unsafe { w.int().bits(divider) });
     pac_pwm.ch(4).top().write(|w| unsafe { w.bits(top as u32) });
     pac_pwm.ch(4).cc().write(|w| unsafe { w.b().bits(0) });
     pac_pwm.ch(4).csr().write(|w| w.en().set_bit());
@@ -214,7 +244,10 @@ pub fn init_motors(
 
         for &pin in &enable_pins {
             // Set as output
-            pac_io.gpio(pin as usize).gpio_ctrl().write(|w| w.funcsel().sio());
+            pac_io
+                .gpio(pin as usize)
+                .gpio_ctrl()
+                .write(|w| w.funcsel().sio());
             pac_pads.gpio(pin as usize).write(|w| {
                 w.od().clear_bit();
                 w.ie().set_bit()
@@ -241,7 +274,10 @@ pub fn init_motors(
 
         for (motor_idx, &(pin_a, pin_b)) in encoder_pins.iter().enumerate() {
             // Configure pin A
-            pac_io.gpio(pin_a as usize).gpio_ctrl().write(|w| w.funcsel().bits(5)); // SIO
+            pac_io
+                .gpio(pin_a as usize)
+                .gpio_ctrl()
+                .write(|w| w.funcsel().bits(5)); // SIO
             pac_pads.gpio(pin_a as usize).write(|w| {
                 w.od().clear_bit();
                 w.ie().set_bit();
@@ -249,7 +285,10 @@ pub fn init_motors(
             });
 
             // Configure pin B
-            pac_io.gpio(pin_b as usize).gpio_ctrl().write(|w| w.funcsel().bits(5)); // SIO
+            pac_io
+                .gpio(pin_b as usize)
+                .gpio_ctrl()
+                .write(|w| w.funcsel().bits(5)); // SIO
             pac_pads.gpio(pin_b as usize).write(|w| {
                 w.od().clear_bit();
                 w.ie().set_bit();
@@ -257,20 +296,21 @@ pub fn init_motors(
             });
 
             // Set as input (clear output enable)
-            sio.gpio_oe_clr().write(|w| w.bits((1 << pin_a) | (1 << pin_b)));
+            sio.gpio_oe_clr()
+                .write(|w| w.bits((1 << pin_a) | (1 << pin_b)));
 
             // Enable edge-detect interrupts for both edges on both pins
             // Use PROC0_INTE registers for CPU0
-            pac_io.proc0_inte(pin_a as usize / 8).modify(|r, w| {
-                let shift = (pin_a as usize % 8) * 4;
-                let mask = 0b1111u32 << shift; // Edge high/low for both rising/falling
-                w.bits(r.bits() | mask)
-            });
-            pac_io.proc0_inte(pin_b as usize / 8).modify(|r, w| {
-                let shift = (pin_b as usize % 8) * 4;
-                let mask = 0b1111u32 << shift;
-                w.bits(r.bits() | mask)
-            });
+            let shift_a = (pin_a as usize % 8) * 4;
+            let mask_a = 0b1111u32 << shift_a;
+            pac_io
+                .proc0_inte(pin_a as usize / 8)
+                .modify(|r, w| w.bits(r.bits() | mask_a));
+            let shift_b = (pin_b as usize % 8) * 4;
+            let mask_b = 0b1111u32 << shift_b;
+            pac_io
+                .proc0_inte(pin_b as usize / 8)
+                .modify(|r, w| w.bits(r.bits() | mask_b));
 
             // Read initial state
             let gpio_in = sio.gpio_in().read().bits();
@@ -291,6 +331,192 @@ pub fn init_motors(
     });
 
     defmt::info!("Motors and encoders initialized successfully");
+}
+
+/// Initialize motor control hardware for RP2040
+#[cfg(rp2040)]
+pub fn init_motors(
+    pac_pwm: hal::pac::PWM,
+    pac_io: hal::pac::IO_BANK0,
+    pac_pads: hal::pac::PADS_BANK0,
+    resets: &mut hal::pac::RESETS,
+    sys_freq_hz: u32,
+) {
+    defmt::info!("Initializing motors for RP2040...");
+
+    // Calculate PWM parameters for 25kHz
+    let (divider, top) = calculate_pwm_params(sys_freq_hz, MOTOR_PWM_FREQ_HZ);
+    defmt::info!(
+        "PWM: div={}, top={}, freq={}Hz",
+        divider,
+        top,
+        sys_freq_hz / (divider as u32 * (top as u32 + 1))
+    );
+
+    // Store TOP values
+    free(|cs| {
+        let mut tops = PWM_TOP_VALUES.borrow(cs).borrow_mut();
+        for i in 0..4 {
+            tops[i] = top;
+        }
+    });
+
+    // Reset PWM
+    resets.reset().modify(|_, w| w.pwm().set_bit());
+    resets.reset().modify(|_, w| w.pwm().clear_bit());
+    while resets.reset_done().read().pwm().bit_is_clear() {}
+
+    // Configure GPIO functions for PWM (funcsel=4 for PWM on RP2040)
+    unsafe {
+        // GPIO6 -> PWM3A (FL)
+        pac_io.gpio(6).gpio_ctrl().write(|w| w.funcsel().bits(4));
+        pac_pads.gpio(6).write(|w| {
+            w.od().clear_bit();
+            w.ie().set_bit()
+        });
+
+        // GPIO9 -> PWM4B (RL)
+        pac_io.gpio(9).gpio_ctrl().write(|w| w.funcsel().bits(4));
+        pac_pads.gpio(9).write(|w| {
+            w.od().clear_bit();
+            w.ie().set_bit()
+        });
+
+        // GPIO3 -> PWM1B (FR)
+        pac_io.gpio(3).gpio_ctrl().write(|w| w.funcsel().bits(4));
+        pac_pads.gpio(3).write(|w| {
+            w.od().clear_bit();
+            w.ie().set_bit()
+        });
+
+        // GPIO20 -> PWM2A (RR)
+        pac_io.gpio(20).gpio_ctrl().write(|w| w.funcsel().bits(4));
+        pac_pads.gpio(20).write(|w| {
+            w.od().clear_bit();
+            w.ie().set_bit()
+        });
+
+        // Configure PWM slices
+        // PWM1 (FR)
+        pac_pwm.ch(1).div().write(|w| w.int().bits(divider));
+        pac_pwm.ch(1).top().write(|w| w.bits(top as u32));
+        pac_pwm.ch(1).cc().write(|w| w.b().bits(0));
+        pac_pwm.ch(1).csr().write(|w| w.en().set_bit());
+
+        // PWM2 (RR)
+        pac_pwm.ch(2).div().write(|w| w.int().bits(divider));
+        pac_pwm.ch(2).top().write(|w| w.bits(top as u32));
+        pac_pwm.ch(2).cc().write(|w| w.a().bits(0));
+        pac_pwm.ch(2).csr().write(|w| w.en().set_bit());
+
+        // PWM3 (FL)
+        pac_pwm.ch(3).div().write(|w| w.int().bits(divider));
+        pac_pwm.ch(3).top().write(|w| w.bits(top as u32));
+        pac_pwm.ch(3).cc().write(|w| w.a().bits(0));
+        pac_pwm.ch(3).csr().write(|w| w.en().set_bit());
+
+        // PWM4 (RL)
+        pac_pwm.ch(4).div().write(|w| w.int().bits(divider));
+        pac_pwm.ch(4).top().write(|w| w.bits(top as u32));
+        pac_pwm.ch(4).cc().write(|w| w.b().bits(0));
+        pac_pwm.ch(4).csr().write(|w| w.en().set_bit());
+    }
+
+    // Configure GPIO enable pins as outputs (using SIO)
+    let enable_pins = [7u8, 8, 4, 5, 10, 11, 21, 22];
+
+    unsafe {
+        let sio = &*hal::pac::SIO::PTR;
+
+        for &pin in &enable_pins {
+            // Set as output
+            pac_io
+                .gpio(pin as usize)
+                .gpio_ctrl()
+                .write(|w| w.funcsel().sio());
+            pac_pads.gpio(pin as usize).write(|w| {
+                w.od().clear_bit();
+                w.ie().set_bit()
+            });
+
+            // Set output enable
+            sio.gpio_oe_set().write(|w| w.bits(1 << pin));
+            // Set low initially
+            sio.gpio_out_clr().write(|w| w.bits(1 << pin));
+        }
+    }
+
+    // Configure encoder pins as inputs with interrupts
+    let encoder_pins = [
+        (12u8, 13u8), // FL: A, B
+        (19u8, 18u8), // FR: A, B
+        (14u8, 15u8), // RL: A, B
+        (17u8, 16u8), // RR: A, B
+    ];
+
+    unsafe {
+        let sio = &*hal::pac::SIO::PTR;
+        let _io = &*hal::pac::IO_BANK0::PTR;
+
+        for (motor_idx, &(pin_a, pin_b)) in encoder_pins.iter().enumerate() {
+            // Configure pin A
+            pac_io
+                .gpio(pin_a as usize)
+                .gpio_ctrl()
+                .write(|w| w.funcsel().sio());
+            pac_pads.gpio(pin_a as usize).write(|w| {
+                w.od().clear_bit();
+                w.ie().set_bit();
+                w.pue().set_bit() // Pull-up enable
+            });
+
+            // Configure pin B
+            pac_io
+                .gpio(pin_b as usize)
+                .gpio_ctrl()
+                .write(|w| w.funcsel().sio());
+            pac_pads.gpio(pin_b as usize).write(|w| {
+                w.od().clear_bit();
+                w.ie().set_bit();
+                w.pue().set_bit() // Pull-up enable
+            });
+
+            // Set as input (clear output enable)
+            sio.gpio_oe_clr()
+                .write(|w| w.bits((1 << pin_a) | (1 << pin_b)));
+
+            // Enable edge-detect interrupts for both edges on both pins
+            // Use PROC0_INTE registers for CPU0
+            let shift_a = (pin_a as usize % 8) * 4;
+            let mask_a = 0b1111u32 << shift_a;
+            pac_io
+                .proc0_inte(pin_a as usize / 8)
+                .modify(|r, w| w.bits(r.bits() | mask_a));
+            let shift_b = (pin_b as usize % 8) * 4;
+            let mask_b = 0b1111u32 << shift_b;
+            pac_io
+                .proc0_inte(pin_b as usize / 8)
+                .modify(|r, w| w.bits(r.bits() | mask_b));
+
+            // Read initial state
+            let gpio_in = sio.gpio_in().read().bits();
+            let state_a = (gpio_in & (1 << pin_a)) != 0;
+            let state_b = (gpio_in & (1 << pin_b)) != 0;
+
+            cortex_m::interrupt::free(|cs| {
+                let mut prev = ENCODER_PREV_STATE.borrow(cs).borrow_mut();
+                prev[motor_idx][0] = state_a;
+                prev[motor_idx][1] = state_b;
+            });
+        }
+    }
+
+    // Mark as initialized
+    free(|cs| {
+        *MOTORS_INITIALIZED.borrow(cs).borrow_mut() = true;
+    });
+
+    defmt::info!("Motors and encoders initialized successfully (RP2040)");
 }
 
 /// Set motor level for a specific motor using direct PAC access
@@ -323,7 +549,8 @@ pub fn set_motor_level(motor_idx: usize, level: i32) {
 
         if level == 0 {
             // Stop motor
-            sio.gpio_out_clr().write(|w| w.bits((1 << ena0_pin) | (1 << ena1_pin)));
+            sio.gpio_out_clr()
+                .write(|w| w.bits((1 << ena0_pin) | (1 << ena1_pin)));
 
             // Set PWM to 0
             if channel == 0 {
@@ -371,9 +598,67 @@ pub fn set_motor_level(motor_idx: usize, level: i32) {
     }
 
     #[cfg(rp2040)]
-    {
-        // Similar implementation for RP2040
-        defmt::warn!("Motor control not yet implemented for RP2040");
+    unsafe {
+        let pwm = &*hal::pac::PWM::PTR;
+        let sio = &*hal::pac::SIO::PTR;
+
+        // Map motor index to PWM slice and channel, GPIO pins
+        let (slice_num, channel, ena0_pin, ena1_pin) = match motor_idx {
+            0 => (3, 0, 7, 8),   // FL: PWM3A, GPIO7, GPIO8
+            1 => (1, 1, 4, 5),   // FR: PWM1B, GPIO4, GPIO5
+            2 => (4, 1, 10, 11), // RL: PWM4B, GPIO10, GPIO11
+            3 => (2, 0, 21, 22), // RR: PWM2A, GPIO21, GPIO22
+            _ => return,
+        };
+
+        if level == 0 {
+            // Stop motor
+            sio.gpio_out_clr()
+                .write(|w| w.bits((1 << ena0_pin) | (1 << ena1_pin)));
+
+            // Set PWM to 0
+            if channel == 0 {
+                pwm.ch(slice_num).cc().modify(|_, w| w.a().bits(0));
+            } else {
+                pwm.ch(slice_num).cc().modify(|_, w| w.b().bits(0));
+            }
+        } else if level < 0 {
+            // Reverse direction
+            let abs_level = if level < -MAX_PWM_LEVEL {
+                MAX_PWM_LEVEL as u16
+            } else {
+                (-level) as u16
+            };
+
+            // ENA0=high, ENA1=low
+            sio.gpio_out_set().write(|w| w.bits(1 << ena0_pin));
+            sio.gpio_out_clr().write(|w| w.bits(1 << ena1_pin));
+
+            // Set PWM level
+            if channel == 0 {
+                pwm.ch(slice_num).cc().modify(|_, w| w.a().bits(abs_level));
+            } else {
+                pwm.ch(slice_num).cc().modify(|_, w| w.b().bits(abs_level));
+            }
+        } else {
+            // Forward direction
+            let abs_level = if level > MAX_PWM_LEVEL {
+                MAX_PWM_LEVEL as u16
+            } else {
+                level as u16
+            };
+
+            // ENA0=low, ENA1=high
+            sio.gpio_out_clr().write(|w| w.bits(1 << ena0_pin));
+            sio.gpio_out_set().write(|w| w.bits(1 << ena1_pin));
+
+            // Set PWM level
+            if channel == 0 {
+                pwm.ch(slice_num).cc().modify(|_, w| w.a().bits(abs_level));
+            } else {
+                pwm.ch(slice_num).cc().modify(|_, w| w.b().bits(abs_level));
+            }
+        }
     }
 }
 
@@ -461,7 +746,10 @@ pub fn process_encoder_interrupts() {
                 // Quadrature decoding state machine
                 // Standard gray code sequence: 00 -> 10 -> 11 -> 01 -> 00 (forward)
                 //                             00 -> 01 -> 11 -> 10 -> 00 (reverse)
-                let state = ((prev_a as u8) << 3) | ((prev_b as u8) << 2) | ((curr_a as u8) << 1) | (curr_b as u8);
+                let state = ((prev_a as u8) << 3)
+                    | ((prev_b as u8) << 2)
+                    | ((curr_a as u8) << 1)
+                    | (curr_b as u8);
 
                 match state {
                     // Forward transitions
@@ -477,9 +765,8 @@ pub fn process_encoder_interrupts() {
                 prev_state[motor_idx][1] = curr_b;
 
                 // Clear interrupts for these pins by writing to INTR (edge status register)
-                io.intr(ints_reg_idx).write(|w| w.bits(
-                    (0b1111 << pin_a_shift) | (0b1111 << pin_b_shift)
-                ));
+                io.intr(ints_reg_idx)
+                    .write(|w| w.bits((0b1111 << pin_a_shift) | (0b1111 << pin_b_shift)));
             }
         });
     }

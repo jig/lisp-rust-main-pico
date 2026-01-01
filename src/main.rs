@@ -94,7 +94,7 @@ static GLOBAL_TEST_PIN: Mutex<RefCell<Option<TestPinType>>> = Mutex::new(RefCell
 #[cfg(rp2350)]
 type AlarmType = hal::timer::Alarm0<hal::timer::CopyableTimer0>;
 #[cfg(rp2040)]
-type AlarmType = hal::timer::Alarm0<hal::timer::Timer<hal::timer::TimerDevice>>;
+type AlarmType = hal::timer::Alarm0;
 static GLOBAL_ALARM: Mutex<RefCell<Option<AlarmType>>> = Mutex::new(RefCell::new(None));
 
 // Counter for ISR debugging
@@ -122,6 +122,7 @@ fn slurp(a: MalArgs) -> MalRet {
     error("unimplemented: slurp")
 }
 
+#[cfg(rp2350)]
 fn create_time_us_func<'a>(
     timer: &'a hal::Timer<impl hal::timer::TimerDevice>,
 ) -> impl Fn(MalArgs) -> MalRet + 'a {
@@ -133,6 +134,17 @@ fn create_time_us_func<'a>(
     }
 }
 
+#[cfg(rp2040)]
+fn create_time_us_func<'a>(timer: &'a hal::Timer) -> impl Fn(MalArgs) -> MalRet + 'a {
+    move |args: MalArgs| {
+        if args.len() != 0 {
+            return error("time-us expects 0 arguments");
+        }
+        Ok(Int(timer.get_counter().ticks() as i64))
+    }
+}
+
+#[cfg(rp2350)]
 fn create_time_ms_func<'a>(
     timer: &'a hal::Timer<impl hal::timer::TimerDevice>,
 ) -> impl Fn(MalArgs) -> MalRet + 'a {
@@ -144,9 +156,30 @@ fn create_time_ms_func<'a>(
     }
 }
 
+#[cfg(rp2040)]
+fn create_time_ms_func<'a>(timer: &'a hal::Timer) -> impl Fn(MalArgs) -> MalRet + 'a {
+    move |args: MalArgs| {
+        if args.len() != 0 {
+            return error("time-ms expects 0 arguments");
+        }
+        Ok(Int((timer.get_counter().ticks() / 1_000) as i64))
+    }
+}
+
+#[cfg(rp2350)]
 fn create_time_s_func<'a>(
     timer: &'a hal::Timer<impl hal::timer::TimerDevice>,
 ) -> impl Fn(MalArgs) -> MalRet + 'a {
+    move |args: MalArgs| {
+        if args.len() != 0 {
+            return error("time-s expects 0 arguments");
+        }
+        Ok(Int((timer.get_counter().ticks() / 1_000_000) as i64))
+    }
+}
+
+#[cfg(rp2040)]
+fn create_time_s_func<'a>(timer: &'a hal::Timer) -> impl Fn(MalArgs) -> MalRet + 'a {
     move |args: MalArgs| {
         if args.len() != 0 {
             return error("time-s expects 0 arguments");
@@ -185,6 +218,15 @@ fn main() -> ! {
 
     // Initialize motor control BEFORE creating Pins (which would consume IO_BANK0/PADS_BANK0)
     #[cfg(rp2350)]
+    motor::init_motors(
+        pac.PWM,
+        pac.IO_BANK0,
+        pac.PADS_BANK0,
+        &mut pac.RESETS,
+        clocks.system_clock.freq().to_Hz(),
+    );
+
+    #[cfg(rp2040)]
     motor::init_motors(
         pac.PWM,
         pac.IO_BANK0,
