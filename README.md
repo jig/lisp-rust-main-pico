@@ -6,6 +6,10 @@ This firmware provides a complete motor control system with quadrature encoder f
 
 > **Note:** For Lisp language documentation, see [github.com/jig/lisp-rust](https://github.com/jig/lisp-rust)
 
+## Importantant Note
+
+This is work in progress! While the core features are implemented and functional, expect ongoing improvements, bug fixes, and additional features in future releases.
+
 ## Features
 
 - **4-Motor PWM Control** - Independent control of 4 DC motors with direction
