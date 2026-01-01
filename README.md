@@ -275,16 +275,6 @@ Get current system time.
 (time-ms)              ; => 12345 (12.345 seconds since boot)
 ```
 
-#### `(mem-free)`
-
-Get free heap memory.
-
-- Returns: Available bytes (heap size: 64 KB)
-
-```lisp
-(mem-free)             ; => 45678
-```
-
 ## Encoder Quadrature Decoding
 
 The firmware implements a hardware interrupt-driven quadrature decoder with the following characteristics:

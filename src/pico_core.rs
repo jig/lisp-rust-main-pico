@@ -67,12 +67,6 @@ pub fn println(args: MalArgs) -> MalRet {
     Ok(Nil)
 }
 
-/// Report free heap memory
-/// Usage: (mem-free)
-pub fn mem_free(_args: MalArgs) -> MalRet {
-    Ok(Int(1024 * 128))
-}
-
 // ============================================================================
 // PID Controller Functions
 // ============================================================================

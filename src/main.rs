@@ -352,7 +352,6 @@ fn main() -> ! {
     env_sets(&env, "readline", func(readline));
     env_sets(&env, "prn", func(pico_core::prn));
     env_sets(&env, "println", func(pico_core::println));
-    env_sets(&env, "mem-free", func(pico_core::mem_free));
 
     // PID functions
     env_sets(&env, "pid-set-dt", func(pico_core::pid_set_dt));
